@@ -1,0 +1,58 @@
+# based on projects/temperature-display_no-rtic.rs
+
+[package]
+authors = ["Paul Gilbert"]
+categories = ["embedded", "no-std"]
+description = "module with 8 AHT10 temperature-humidity sensors, and MCU stm32f401"
+keywords = ["stm32f401", "i2c", "spi"]
+license = "MIT OR Apache-2.0"
+name = "th8-f401"
+version = "0.0.1"
+edition = "2021"
+
+ 
+[dependencies]
+
+cortex-m-semihosting   = ">=0.5.0"
+                                         
+stm32f4xx-hal = { git = "https://github.com/stm32-rs/stm32f4xx-hal" }
+
+embedded-hal        = "1.0"
+embedded-hal-bus    = "0.2.0"
+embedded-hal-async  = "1.0.0"
+
+nb = ">=1.1.0"
+libm = "0.2"
+cortex-m = ">=0.7"
+cortex-m-rt = ">=0.7.0"
+
+panic-semihosting    = { version = ">=0.5.2" }
+panic-halt           = { version = ">=0.2.0" }
+
+heapless = "0.7"
+embedded-graphics = ">=0.7"
+
+# This radio-sx127 re-exports {Receive, Transmit} so insures correct radio version.
+radio-sx127x  = {  git = "https://github.com/pdgilbert/rust-radio-sx127x", default-features = false, branch = "ehal-1" }
+
+
+#ssd1306         = ">=0.8.0"   
+#ssd1306         = { git = "https://github.com/jamwaffles/ssd1306"  }  
+ssd1306         = { git = "https://github.com/sjoerdsimons/ssd1306", branch = "master"  } # embedded-hal-1.0.0
+
+xca9548a         = ">=1.0.0"
+#xca9548a         = { git = "https://github.com/eldruin/xca9548a-rs" }
+
+#aht10 needs DelayMs from this
+embedded-hal-02 = { package = "embedded-hal", version = "0.2.7", features = ["unproven"] }
+
+#  See https://github.com/heyitsanthony/aht10/issues/2
+#aht10           = { git = "https://github.com/heyitsanthony/aht10" }
+aht10           = { git = "https://github.com/andy31415/aht10", branch = "fix_status_check" }
+#aht10-async           = { git = "https://github.com/jneem/aht10-async" }  
+
+aht20-driver = { version = "2.0.0", default-features = false  }   # uses eh-1.  defmt, on by default, makes bin is big
+#  see https://github.com/anglerud/aht20-driver/blob/main/Cargo.toml
+
+[features]
+stm32f401     = ["stm32f4xx-hal/stm32f401"  ] 
