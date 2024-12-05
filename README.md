@@ -7,7 +7,7 @@ See the auto-generated menu in the github README display (above right).
 ## Summary
 
 This crate has code for a hardware design as in repository
-https://github.com/pdgilbert/SensorProject_t8-f401-pcb.
+https://github.com/pdgilbert/SensorProject_th8-f401-pcb.
 It measures temperature  and humidity from eight AHT10s or AHT20s. 
 The measurements are transmitted by LoRa and optionally displayed on an SSD1306.
 
