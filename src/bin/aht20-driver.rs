@@ -19,7 +19,7 @@
 const MONITOR_ID: &str = option_env!("MONITOR_ID").expect("Txxx");
 const MONITOR_IDU : &[u8] = MONITOR_ID.as_bytes();
 
-const MODULE_CODE:  &str = "aht20"; //"th8-f401"; 
+const MODULE_CODE:  &str = "th8-f401 aht20"; //"th8-f401"; 
 const READ_INTERVAL:  u32 = 300;  // used as seconds  but 
 const BLINK_DURATION: u32 = 1;  // used as seconds  but  ms would be better
 const S_FMT:       usize  = 12;
@@ -40,6 +40,14 @@ use cortex_m::asm; // for delay
 use cortex_m_rt::entry;
 
 use core::fmt::Write;
+use embedded_hal::delay::DelayNs;
+
+/////////////////////  sensor crate
+
+use aht20_driver; 
+use aht20_driver::{AHT20, AHT20Initialized, SENSOR_ADDRESS as S_ADDR} ; 
+
+/////////////////////
 
 use stm32f4xx_hal::{
     pac::{Peripherals, I2C1, I2C2, SPI1, TIM5},
@@ -86,12 +94,6 @@ use ssd1306::{mode::BufferedGraphicsMode, prelude::*, I2CDisplayInterface, Ssd13
 
 use xca9548a::{SlaveAddr as XcaSlaveAddr, Xca9548a, I2cSlave}; 
 
-
-/////////////////////  aht20
-
-use embedded_hal::delay::DelayNs;
-use aht20_driver; 
-use aht20_driver::{AHT20, AHT20Initialized, SENSOR_ADDRESS} ; 
 
 
 /////////////////////  lora
@@ -154,7 +156,6 @@ const MODE: Mode = Mode {
        write!(line,   "{}°C {}%RH {}°C {}%RH",  th[6].0, th[6].1,  th[7].0, th[7].1 ).unwrap();
 
    // CHECK SIGN IS CORRECT FOR -0.3 C
-   // NEED TO DISPLAY THE REST
 
        show_message(&line, disp);
        ()
@@ -189,7 +190,7 @@ const MODE: Mode = Mode {
            ) -> heapless::Vec<u8, MESSAGE_LEN> {
 
         let mut line: heapless::Vec<u8, MESSAGE_LEN> = heapless::Vec::new(); 
-        let mut temp: heapless::Vec<u8, S_FMT> = heapless::Vec::new(); 
+        let mut zz: heapless::Vec<u8, S_FMT> = heapless::Vec::new(); 
 
         // Consider handling error in next. If line is too short then attempt to write it crashes
         
@@ -197,17 +198,14 @@ const MODE: Mode = Mode {
         line.push(b'<').unwrap();
         
         for i in 0..th.len() {
-                temp.clear();
-                //hprintln!(" J{}:{:3}.{:1}",      i+1, t[i]/10, t[i].abs() %10); // t[0] is for J1
-                //write!(temp,  " J{}:{:3}.{:1}",  i+1, t[i]/10, t[i].abs() %10).unwrap(); // must not exceed S_FMT
-                //hprintln!("temp {:?}  temp.len {}", temp, temp.len());
-                //for j in 0..temp.len() {line.push(temp[j]).unwrap()};
-                //for j in 0..th.len() {line.push(th[i].0).unwrap()};
-                for j in 0..th.len() {line.push(0).unwrap()};   //FAKE
+                zz.clear();
+                write!(zz,  " J{}:({},{})",  i+1, th[i].0, th[i].1).unwrap(); // must not exceed S_FMT
+                for j in 0..zz.len() {line.push(zz[j]).unwrap()};
         };
 
         line.push(b'>').unwrap();
-         
+        hprintln!("{:?}", line);
+
         line
      }
 
@@ -359,6 +357,7 @@ fn main() -> ! {
 
    /////////////////////  sensors on xca    // Start the sensors.
    //  Option allows for the possibility that some sensors are missing.
+    hprintln!("xca ");
 
    //type I2c1Type = I2c<I2C1, Error = ErrorType>;
    type I2c1Type = I2cType<I2C1>;
@@ -376,30 +375,37 @@ fn main() -> ! {
    // Split the device and pass the virtual I2C devices to AHT20 driver
    let switch1parts = switch1.split();
 
-   //  a loop for this should be possible, but not easy.
-   let mut z = AHT20::new(switch1parts.i2c0,  SENSOR_ADDRESS);
-   sensors[0] = z.init(&mut delay).ok();
+   hprintln!("sensors ");
+   //  a loop for this should be possible, but my attempts cause lifetime problems.
+   let mut z = AHT20::new(switch1parts.i2c0,  S_ADDR);
+   hprintln!("sensor 0 ");
+   sensors[0] = match z.init(&mut delay) { Ok(v) => {Some(v)},  Err(_v) => {None} };
+   hprintln!("sensor 0 init");
 
-   let mut z = AHT20::new(switch1parts.i2c1,  SENSOR_ADDRESS);
-   sensors[1] = z.init(&mut delay).ok();
+   let mut z = AHT20::new(switch1parts.i2c1,  S_ADDR);
+   hprintln!("sensor 1 ");
+   sensors[1] = match z.init(&mut delay) { Ok(v) => {Some(v)},  Err(_v) => {None} };
+   hprintln!("sensor 1 init");
 
-   let mut z = AHT20::new(switch1parts.i2c2,  SENSOR_ADDRESS);
-   sensors[2] = z.init(&mut delay).ok();
+   let mut z = AHT20::new(switch1parts.i2c2,  S_ADDR);
+   hprintln!("sensor 2 ");
+   sensors[2] = match z.init(&mut delay) { Ok(v) => {Some(v)},  Err(_v) => {None} };
+   hprintln!("sensor 2 init");
 
-   let mut z = AHT20::new(switch1parts.i2c3,  SENSOR_ADDRESS);
-   sensors[3] = z.init(&mut delay).ok();
+   let mut z = AHT20::new(switch1parts.i2c3,  S_ADDR);
+   sensors[3] = match z.init(&mut delay) { Ok(v) => {Some(v)},  Err(_v) => {None} };
 
-   let mut z = AHT20::new(switch1parts.i2c4,  SENSOR_ADDRESS);
-   sensors[4] = z.init(&mut delay).ok();
+   let mut z = AHT20::new(switch1parts.i2c4,  S_ADDR);
+   sensors[4] = match z.init(&mut delay) { Ok(v) => {Some(v)},  Err(_v) => {None} };
 
-   let mut z = AHT20::new(switch1parts.i2c5,  SENSOR_ADDRESS);
-   sensors[5] = z.init(&mut delay).ok();
+   let mut z = AHT20::new(switch1parts.i2c5,  S_ADDR);
+   sensors[5] = match z.init(&mut delay) { Ok(v) => {Some(v)},  Err(_v) => {None} };
 
-   let mut z = AHT20::new(switch1parts.i2c6,  SENSOR_ADDRESS);
-   sensors[6] = z.init(&mut delay).ok();
+   let mut z = AHT20::new(switch1parts.i2c6,  S_ADDR);
+   sensors[6] = match z.init(&mut delay) { Ok(v) => {Some(v)},  Err(_v) => {None} };
 
-   let mut z = AHT20::new(switch1parts.i2c7,  SENSOR_ADDRESS);
-   sensors[7] = z.init(&mut delay).ok();
+   let mut z = AHT20::new(switch1parts.i2c7,  S_ADDR);
+   sensors[7] = match z.init(&mut delay) { Ok(v) => {Some(v)},  Err(_v) => {None} };
 
 
    //    screen[0].clear();
@@ -407,6 +413,8 @@ fn main() -> ! {
 
 
     /////////////////////   lora
+    hprintln!("lora");
+    
 
     // cs is named nss on many radio_sx127x module boards
     let z = Sx127x::spi(spi, spiext.cs,  spiext.busy, spiext.ready, spiext.reset, delay, 
@@ -428,11 +436,13 @@ fn main() -> ! {
     //delay consumed by lora. It is available in lora BUT treats arg as seconds not ms!!
     lora.delay_ms(1);  // arg is being treated as seconds
 
+    hprintln!("loop");
     
     loop {
       led.on(); 
       lora.delay_ms(BLINK_DURATION);  // arg is being treated as seconds
       led.off();
+      hprintln!("read sensors");
 
       for i in 0..sensors.len() {
          th[i] =  match   &mut sensors[i] {
