@@ -2,8 +2,8 @@
 //! xcs9548a because all sensors use the same address.
 //! Display using SSD1306 on I2C2. Transmit with LoRa on SPI.
 
-//!  To Do:
-//!    - make work better.
+//  To Do:
+//    - make work better.
 
 #![deny(unsafe_code)]
 #![no_std]
@@ -15,6 +15,8 @@
 // set this with
 // MONITOR_ID="whatever" cargo build ...
 // or  cargo:rustc-env=MONITOR_ID="whatever"
+//  run with
+// MONITOR_ID="whatever"  cargo  run --no-default-features --target thumbv7em-none-eabihf --features stm32f401 --bin aht20-driver
 
 const MONITOR_ID: &str = option_env!("MONITOR_ID").expect("Txxx");
 const MONITOR_IDU : &[u8] = MONITOR_ID.as_bytes();
@@ -46,22 +48,12 @@ use core::fmt::Write;
 use embedded_hal::delay::DelayNs;
 
 use stm32f4xx_hal::{
-    pac::{Peripherals, I2C1, I2C2, SPI1, TIM5},
-    timer::{Delay as halDelay},
-    rcc::{RccExt},
+    pac::{Peripherals, I2C1, I2C2, SPI1,},
     spi::{Spi},
     i2c::I2c as I2cType,   //this is a type vs  embedded_hal::i2c::I2c trait
-    gpio::{Output, PushPull, GpioExt, Input},
+    gpio::{Output, },
     gpio::{Pin}, 
-    gpio::{gpioa::{PA0, PA4, }},
-    gpio::{gpiob::{PB4, PB5, }},
-    gpio::{gpioc::{PC13}},
-    prelude::*,
-    timer::{TimerExt},
 };
-
-
-use embedded_hal::{spi::{Mode, Phase, Polarity},digital::OutputPin,};                   
 
 
 
@@ -69,6 +61,12 @@ use embedded_hal::{spi::{Mode, Phase, Polarity},digital::OutputPin,};
 
 use aht20_driver; 
 use aht20_driver::{AHT20, AHT20Initialized, SENSOR_ADDRESS as S_ADDR}; 
+
+
+//////////////////////  xca  //////////////////////////////////
+//use xca9548a::{Read, Write, WriteRead};
+use xca9548a::{SlaveAddr as XcaSlaveAddr, Xca9548a, I2cSlave}; 
+
 
 //////////////////////  display  //////////////////////////////////
 
@@ -95,16 +93,8 @@ const R_VAL: heapless::String<DISPLAY_COLUMNS> = heapless::String::new();
 
 type  ScreenType = [heapless::String<DISPLAY_COLUMNS>; DISPLAY_LINES];
 
-//////////////////////  xca  //////////////////////////////////
-//use xca9548a::{Read, Write, WriteRead};
 
-use xca9548a::{SlaveAddr as XcaSlaveAddr, Xca9548a, I2cSlave}; 
-
-
-/////////////////////  lora
-
-use th8_f401::lora::Base;
-use th8_f401::lora::{CONFIG_RADIO};
+/////////////////////  lora  //////////////////////////////////
 
 use radio_sx127x::{
     Transmit,  // trait needs to be in scope to find  methods start_transmit and check_transmit.
@@ -115,46 +105,18 @@ use radio_sx127x::{
 
 };
 
+//type LoraType = Sx127x<Base<Spi<SPI1>, Pin<'A', 4, Output>, Pin<'B', 4>, Pin<'B', 5>, Pin<'A', 0, Output>, timDelay<TIM5, 1000000>>>;
+type LoraType = Sx127x<Base<Spi<SPI1>, Pin<'A', 4, Output>, Pin<'B', 4>, Pin<'B', 5>, Pin<'A', 0, Output>, Delay1Type>>;
 
-//   //////////////////////////////////////////////////////////////////////
+/////////////////////  local libs  //////////////////////////////////
 
-trait LED: OutputPin {  // see The Rust Programming Language, section 19, Using Supertraits...
-    // depending on board wiring, on may be set_high or set_low, with off also reversed
-    // A default of set_low() for on is defined here, but implementation should deal with a difference
-    fn on(&mut self) -> () {
-        self.set_low().unwrap()
-    }
-    fn off(&mut self) -> () {
-        self.set_high().unwrap()
-    }
+use th8_f401::lora::Base;
+use th8_f401::lora::{CONFIG_RADIO};
 
-    // Note these default methods use delay so DO NOT USE IN rtic.
+use th8_f401::setup::{setup_from_dp, LED, Delay1Type};
 
-    fn blink(&mut self, time: u16, delay: &mut impl DelayNs) -> () {
-        self.on();
-        delay.delay_ms(time.into());
-        self.off();
-        delay.delay_ms(time.into()); //consider delay.delay_ms(500);
-    }
-}
 
-impl LED for  PC13<Output<PushPull>> {}    
-
-/////////////////////////////  spi  //////////////////////////////////
-
-struct SpiExt {  cs:    PA4<Output<PushPull>>, 
-                 busy:  PB4<Input<>>, 
-                 ready: PB5<Input<>>, 
-                 reset: PA0<Output<PushPull>>
-}
-
-const MODE: Mode = Mode {
-    //  SPI mode for radio
-    phase: Phase::CaptureOnSecondTransition,
-    polarity: Polarity::IdleHigh,
-};
-
-//   //////////////////////////////////////////////////////////////////
+/////////////////////////// functions ////////////////////////////////////////
 
     fn show_display(
         th: [(f32, f32); 8],
@@ -226,8 +188,6 @@ const MODE: Mode = Mode {
      }
 
 
-    type LoraType = Sx127x<Base<Spi<SPI1>, Pin<'A', 4, Output>, Pin<'B', 4>, Pin<'B', 5>, Pin<'A', 0, Output>, halDelay<TIM5, 1000000>>>;
-
     fn send(
             lora: &mut LoraType,
             m:  heapless::Vec<u8, MESSAGE_LEN>,
@@ -260,63 +220,16 @@ const MODE: Mode = Mode {
        ()
     }
 
-//   //////////////////////////////////////////////////////////////////
+//////////////////////////  main  /////////////////////////////////////
 
 #[entry]
 fn main() -> ! {
 
-   hprintln!("t8-f401");
+    hprintln!("t8-f401");
 
-   let dp = Peripherals::take().unwrap();
-   let rcc = dp.RCC.constrain();
-   let clocks = rcc.cfgr.freeze();
+    let dp = Peripherals::take().unwrap();
 
-   // according to  https://github.com/rtic-rs/rtic/blob/master/examples/stm32f411_rtc_interrupt/src/main.rs
-   // 25 MHz must be used for HSE on the Blackpill-STM32F411CE board according to manual
-   // let clocks = rcc.cfgr.use_hse(25.MHz()).freeze();
-   
-   let gpioa = dp.GPIOA.split();
-   let gpiob = dp.GPIOB.split();
-   let gpioc   = dp.GPIOC.split();
-
-   let scl = gpiob.pb8.into_alternate_open_drain(); 
-   let sda = gpiob.pb9.into_alternate_open_drain(); 
-   let i2c1 = I2cType::new(dp.I2C1, (scl, sda), 400.kHz(), &clocks);
-
-   let scl = gpiob.pb10.into_alternate_open_drain();
-   let sda = gpiob.pb3.into_alternate_open_drain();
-   let i2c2 = I2cType::new(dp.I2C2, (scl, sda), 400.kHz(), &clocks);
-
-   let mut led = gpioc.pc13.into_push_pull_output();
-   led.off();
-
-   let spi = Spi::new(
-       dp.SPI1,
-       (
-           gpioa.pa5.into_alternate(), // sck  
-           gpioa.pa6.into_alternate(), // miso 
-           gpioa.pa7.into_alternate(), // mosi 
-       ),
-       MODE, 8.MHz(), &clocks,
-   );
-   
-   let spiext = SpiExt {
-        cs:    gpioa.pa4.into_push_pull_output(), //CsPin         
-        busy:  gpiob.pb4.into_floating_input(),   //BusyPin  DI00 
-        ready: gpiob.pb5.into_floating_input(),   //ReadyPin DI01 
-        reset: gpioa.pa0.into_push_pull_output(), //ResetPin   
-        };   
-
-
-    let mut delay  = dp.TIM5.delay::<1_000_000>(&clocks); 
-    let mut delay2 = dp.TIM2.delay::<1_000_000>(&clocks); 
-
-    led.off();
-    delay.delay_ms(2000); 
-    
-    led.on();
-    delay.delay_ms(BLINK_DURATION); 
-    led.off();
+    let (i2c1, i2c2, spi, spiext, mut led, mut delay, mut delay2) =  setup_from_dp(dp);
 
     /////////////////////   ssd
 
@@ -362,15 +275,6 @@ fn main() -> ! {
     let switch1parts = switch1.split();
 
     //  a loop for this should be possible, but my attempts cause lifetime problems.
-//    let mut z = AHT20::new(switch1parts.i2c0,  S_ADDR);
-//    hprintln!("sensor 0 ");
-//    let zz = z.init(&mut delay2);
-//    hprintln!("sensor 0a");
-//    let zzz = match zz {  Ok(v) => {Some(v)},  
-//                        Err(_e) => {None} };
-//    hprintln!("sensor 0b");
-//    sensors[0] = zzz;
-//    hprintln!("sensor 0c");
 
     hprintln!("sensor 0a ");
     let mut z = AHT20::new(switch1parts.i2c0,  S_ADDR);
