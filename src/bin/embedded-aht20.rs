@@ -160,19 +160,6 @@ impl DelayNs for AltDelay {
 }
 
 
-//impl DelayUs<u16> for AltDelay {
-//    fn delay_us(&mut self, t:u16) {
-//       delay((t as u32) * (ALTCLOCK / 1_000_000)); 
-//    }
-//}
-//
-//
-//impl DelayMs<u16> for AltDelay {
-//    fn delay_ms(&mut self, ms: u16) {
-//       delay((ms as u32) * (ALTCLOCK / 1000)); 
-//    }
-//}
-
 //   //////////////////////////////////////////////////////////////////
 
     fn show_display(
@@ -297,8 +284,10 @@ fn main() -> ! {
    let gpiob = dp.GPIOB.split();
    let gpioc   = dp.GPIOC.split();
 
-   let scl = gpiob.pb6.into_alternate_open_drain(); 
-   let sda = gpiob.pb7.into_alternate_open_drain(); 
+   //let scl = gpiob.pb6.into_alternate_open_drain(); 
+   //let sda = gpiob.pb7.into_alternate_open_drain(); 
+   let scl = gpiob.pb8.into_alternate_open_drain(); 
+   let sda = gpiob.pb9.into_alternate_open_drain(); 
    let i2c1 = I2cType::new(dp.I2C1, (scl, sda), 400.kHz(), &clocks);
 
    let scl = gpiob.pb10.into_alternate_open_drain();
@@ -410,6 +399,7 @@ hprintln!("prt in parts");
        hprintln!("screen[0].clear()");
        //screen[0].clear();
        hprintln!("prt {}", i);
+       asm::bkpt();
        let z = Aht20::new(prt, S_ADDR, AltDelay{});
        hprintln!("match z");
        sensors[i] = match z { Ok(v) => {Some(v)},  Err(_v) => {None} };

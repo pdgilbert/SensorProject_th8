@@ -35,19 +35,15 @@ use panic_semihosting as _;
 use panic_halt as _;
 
 //use cortex_m_semihosting::{debug, hprintln};
-use cortex_m_semihosting::{hprintln};
-use cortex_m::asm; // for delay
+use cortex_m_semihosting::hprintln;
+//use cortex_m::asm;
 use cortex_m_rt::entry;
 
 use core::fmt::Write;
+
+/////////////////////////////   hals  //////////////////////////////////
+
 use embedded_hal::delay::DelayNs;
-
-/////////////////////  sensor crate
-
-use aht20_driver; 
-use aht20_driver::{AHT20, AHT20Initialized, SENSOR_ADDRESS as S_ADDR} ; 
-
-/////////////////////
 
 use stm32f4xx_hal::{
     pac::{Peripherals, I2C1, I2C2, SPI1, TIM5},
@@ -56,44 +52,53 @@ use stm32f4xx_hal::{
     spi::{Spi},
     i2c::I2c as I2cType,   //this is a type vs  embedded_hal::i2c::I2c trait
     gpio::{Output, PushPull, GpioExt, Input},
-    prelude::*,
-    timer::{TimerExt},
     gpio::{Pin}, 
     gpio::{gpioa::{PA0, PA4, }},
     gpio::{gpiob::{PB4, PB5, }},
     gpio::{gpioc::{PC13}},
+    prelude::*,
+    timer::{TimerExt},
 };
 
 
-use embedded_hal::{spi::{Mode, Phase, Polarity},digital::OutputPin,};
-                   //i2c::{I2c},   //trait
-                   //delay::DelayNs,
-                   
+use embedded_hal::{spi::{Mode, Phase, Polarity},digital::OutputPin,};                   
 
 
-/////////////////////   ssd
-// See https://docs.rs/embedded-graphics/0.7.1/embedded_graphics/mono_font/index.html re fonts
+
+//////////////////////  sensor crate  //////////////////////////////////
+
+use aht20_driver; 
+use aht20_driver::{AHT20, AHT20Initialized, SENSOR_ADDRESS as S_ADDR}; 
+
+//////////////////////  display  //////////////////////////////////
+
+use ssd1306::{mode::BufferedGraphicsMode, prelude::*, I2CDisplayInterface, Ssd1306};
 
 use embedded_graphics::{
-    mono_font::{iso_8859_1::FONT_8X13 as FONT, MonoTextStyleBuilder}, 
+    mono_font::{iso_8859_1::FONT_8X13 as FONT, MonoTextStyleBuilder},      // need iso for degree symbol
     pixelcolor::BinaryColor,
     prelude::*,
     text::{Baseline, Text},
 };
 
-type  DisplaySize = ssd1306::prelude::DisplaySize128x64;
-type  DisplayType = Ssd1306<I2CInterface<I2cType<I2C2>>, DisplaySize, BufferedGraphicsMode<DisplaySize>>;
+type  DisplaySizeType = ssd1306::prelude::DisplaySize128x64;
+type  DisplayType = Ssd1306<I2CInterface<I2cType<I2C2>>, DisplaySizeType, BufferedGraphicsMode<DisplaySizeType>>;
 
-//common display sizes are 128x64 and 128x32
-const DISPLAYSIZE: DisplaySize = DisplaySize128x64;
+// Note: The screen layout accommodates no more than 4 sensors installed! If more are installed then
+//       the code will probably panic trying to write beyond the limit of the screen variable.
+const ROTATION: DisplayRotation = DisplayRotation::Rotate0;   // 0, 90, 180, 270
+const DISPLAYSIZE: DisplaySizeType = DisplaySize128x64;
+const PPC: usize = 12;  // verticle pixels per character plus space for FONT_6X10 
+const DISPLAY_LINES: usize = 6;     // in characters for 128x64   Rotate0
+const DISPLAY_COLUMNS: usize = 20;  // in characters   Rotate0
+const R_VAL: heapless::String<DISPLAY_COLUMNS> = heapless::String::new();
 
-use ssd1306::{mode::BufferedGraphicsMode, prelude::*, I2CDisplayInterface, Ssd1306};
+type  ScreenType = [heapless::String<DISPLAY_COLUMNS>; DISPLAY_LINES];
 
-/////////////////////  xca
+//////////////////////  xca  //////////////////////////////////
 //use xca9548a::{Read, Write, WriteRead};
 
 use xca9548a::{SlaveAddr as XcaSlaveAddr, Xca9548a, I2cSlave}; 
-
 
 
 /////////////////////  lora
@@ -123,9 +128,19 @@ trait LED: OutputPin {  // see The Rust Programming Language, section 19, Using 
         self.set_high().unwrap()
     }
 
+    // Note these default methods use delay so DO NOT USE IN rtic.
+
+    fn blink(&mut self, time: u16, delay: &mut impl DelayNs) -> () {
+        self.on();
+        delay.delay_ms(time.into());
+        self.off();
+        delay.delay_ms(time.into()); //consider delay.delay_ms(500);
+    }
 }
 
 impl LED for  PC13<Output<PushPull>> {}    
+
+/////////////////////////////  spi  //////////////////////////////////
 
 struct SpiExt {  cs:    PA4<Output<PushPull>>, 
                  busy:  PB4<Input<>>, 
@@ -153,7 +168,7 @@ const MODE: Mode = Mode {
        write!(line,   "{}°C {}%RH {}°C {}%RH\n",  th[0].0, th[0].1,  th[1].0, th[1].1 ).unwrap();
        write!(line,   "{}°C {}%RH {}°C {}%RH\n",  th[2].0, th[2].1,  th[3].0, th[3].1 ).unwrap();
        write!(line,   "{}°C {}%RH {}°C {}%RH\n",  th[4].0, th[4].1,  th[5].0, th[5].1 ).unwrap();
-       write!(line,   "{}°C {}%RH {}°C {}%RH",  th[6].0, th[6].1,  th[7].0, th[7].1 ).unwrap();
+    //too long   write!(line,   "{}°C {}%RH {}°C {}%RH\n",  th[6].0, th[6].1,  th[7].0, th[7].1 ).unwrap();
 
    // CHECK SIGN IS CORRECT FOR -0.3 C
 
@@ -198,8 +213,9 @@ const MODE: Mode = Mode {
         line.push(b'<').unwrap();
         
         for i in 0..th.len() {
+                hprintln!("xJ{}:({:.1},{:.0})x",  i+1, th[i].0, th[i].1); 
                 zz.clear();
-                write!(zz,  " J{}:({},{})",  i+1, th[i].0, th[i].1).unwrap(); // must not exceed S_FMT
+                write!(zz,  "J{}:({:.1},{:.0})",  i+1, th[i].0, th[i].1).unwrap(); // must not exceed S_FMT
                 for j in 0..zz.len() {line.push(zz[j]).unwrap()};
         };
 
@@ -249,7 +265,7 @@ const MODE: Mode = Mode {
 #[entry]
 fn main() -> ! {
 
-   //hprintln!("t8-th4-f401").unwrap();
+   hprintln!("t8-f401");
 
    let dp = Peripherals::take().unwrap();
    let rcc = dp.RCC.constrain();
@@ -263,8 +279,8 @@ fn main() -> ! {
    let gpiob = dp.GPIOB.split();
    let gpioc   = dp.GPIOC.split();
 
-   let scl = gpiob.pb6.into_alternate_open_drain(); 
-   let sda = gpiob.pb7.into_alternate_open_drain(); 
+   let scl = gpiob.pb8.into_alternate_open_drain(); 
+   let sda = gpiob.pb9.into_alternate_open_drain(); 
    let i2c1 = I2cType::new(dp.I2C1, (scl, sda), 400.kHz(), &clocks);
 
    let scl = gpiob.pb10.into_alternate_open_drain();
@@ -308,17 +324,17 @@ fn main() -> ! {
 
     let mut z = Ssd1306::new(interface, DISPLAYSIZE, DisplayRotation::Rotate0);
 
-    let mut disp: Option<DisplayType> = match z.init() {
+    let mut display: Option<DisplayType> = match z.init() {
         Ok(_d)  => {Some(z.into_buffered_graphics_mode())} 
         Err(_e) => {None}
     };
 
     // let mut screen: [heapless::String<DISPLAY_COLUMNS>; DISPLAY_LINES] = [R_VAL; DISPLAY_LINES];
 
-    show_message(MODULE_CODE, &mut disp);
+    show_message(MODULE_CODE, &mut display);
 
     delay.delay_ms(2000); // treated as ms
-    //hprintln!("display initialized.").unwrap();
+    hprintln!("display initialized.");
 
 
    
@@ -326,108 +342,98 @@ fn main() -> ! {
 
     let switch1 = Xca9548a::new(i2c1, XcaSlaveAddr::default());
 
-//    let slave_address = 0b010_0000; // example slave address
-//    let write_data = [0b0101_0101, 0b1010_1010]; // some data to be sent
+    show_message(&"Sensors on xca", &mut display);
+
+    /////////////////////  sensors on xca    // Start the sensors.
+
+    type I2c1Type = I2cType<I2C1>;
+    type SensType<'a> = AHT20Initialized<'a, I2cSlave<'a, Xca9548a<I2c1Type>, I2c1Type>>;
+
+    //  Option allows for the possibility that some sensors are missing.
+    //const gives this `static lifetime, which causes does not live long enough here
+    //const SENSER: Option::<SensType> = None; 
+    //let mut sensors: [Option<SensType>; 8] = [SENSER; 8];
+    
+    let mut sensors: [Option<SensType>; 8] = [ None, None, None, None, None, None, None, None, ];
+
+    let mut th: [(f32, f32); 8] = [(-500.0, -500.0); 8];
+
+    // Split the device and pass the virtual I2C devices to sensor driver
+    let switch1parts = switch1.split();
+
+    //  a loop for this should be possible, but my attempts cause lifetime problems.
+//    let mut z = AHT20::new(switch1parts.i2c0,  S_ADDR);
+//    hprintln!("sensor 0 ");
+//    let zz = z.init(&mut delay2);
+//    hprintln!("sensor 0a");
+//    let zzz = match zz {  Ok(v) => {Some(v)},  
+//                        Err(_e) => {None} };
+//    hprintln!("sensor 0b");
+//    sensors[0] = zzz;
+//    hprintln!("sensor 0c");
+
+    hprintln!("sensor 0a ");
+    let mut z = AHT20::new(switch1parts.i2c0,  S_ADDR);
+    sensors[0] = match z.init(&mut delay) { Ok(v) => {Some(v)},  Err(_e) => {None} };
+    hprintln!("sensor 0b ");
+
+    let mut z = AHT20::new(switch1parts.i2c1,  S_ADDR);
+    sensors[1] = match z.init(&mut delay) { Ok(v) => {Some(v)},  Err(_e) => {None} };
+    hprintln!("sensor 1 ");
+
+    let mut z = AHT20::new(switch1parts.i2c2,  S_ADDR);
+    sensors[2] = match z.init(&mut delay) { Ok(v) => {Some(v)},  Err(_e) => {None} };
+
+    let mut z = AHT20::new(switch1parts.i2c3,  S_ADDR);
+    sensors[3] = match z.init(&mut delay) { Ok(v) => {Some(v)},  Err(_e) => {None} };
+
+    let mut z = AHT20::new(switch1parts.i2c4,  S_ADDR);
+    sensors[4] = match z.init(&mut delay) { Ok(v) => {Some(v)},  Err(_e) => {None} };
+
+    let mut z = AHT20::new(switch1parts.i2c5,  S_ADDR);
+    sensors[5] = match z.init(&mut delay) { Ok(v) => {Some(v)},  Err(_e) => {None} };
+
+    let mut z = AHT20::new(switch1parts.i2c6,  S_ADDR);
+    sensors[6] = match z.init(&mut delay) { Ok(v) => {Some(v)},  Err(_e) => {None} };
+
+    let mut z = AHT20::new(switch1parts.i2c7,  S_ADDR);
+    sensors[7] = match z.init(&mut delay) { Ok(v) => {Some(v)},  Err(_e) => {None} };
+
+    /////////////////  don't need this if there is no screen
+    hprintln!("Sensors in use:");
+    show_message("Sensors in use:", &mut display);
+
+//    screen[0].clear();
+//    screen[1].clear();
+//    write!(screen[0], "Sensors in use:").unwrap();
 //
-//    // Enable channel 0
-//    switch1.select_channels(0b0000_0001).unwrap();
+//    for  i in 0..7 {  // 7 is sensors.len(() 
+//       if  sensors[i].is_some() {write!(screen[1], "{} ", i+1).unwrap()}
+//    };
 //
-//    // write to device connected to channel 0 using the I2C switch
-//    if switch1.write(slave_address, &write_data).is_err() {
-//        //hprintln!("Error write channel 0!").unwrap();
-//    }
+//    show_screen(&screen, &mut display);
+//    delay.delay_ms(5000);
 //
-//    // read from device connected to channel 0 using the I2C switch
-//    let mut read_data = [0; 2];
-//    if switch1.read(slave_address, &mut read_data).is_err() {
-//        //hprintln!("Error read channel 0!").unwrap();
-//    }
+//    screen[0].clear();
+//    write!(screen[0], "   °C   %RH").unwrap();
 //
-//    // write_read from device connected to channel 0 using the I2C switch
-//    if switch1
-//        .write_read(slave_address, &write_data, &mut read_data)
-//        .is_err()
-//    {
-//        //hprintln!("Error write_read!").unwrap();
-//    }
-
-
-   //   show_message(&"AHT20s on xca", &mut display);
-
-
-   /////////////////////  sensors on xca    // Start the sensors.
-   //  Option allows for the possibility that some sensors are missing.
-    hprintln!("xca ");
-
-   //type I2c1Type = I2c<I2C1, Error = ErrorType>;
-   type I2c1Type = I2cType<I2C1>;
-
-   type SensType<'a> = AHT20Initialized<'a, I2cSlave<'a, Xca9548a<I2c1Type>, I2c1Type>>;
-
-   //const gives this `static lifetime which might be good for rtic but complicates things here
-   //const SENSER: Option::<SensType> = None; 
-   //let mut sensors: [Option<SensType>; 8] = [SENSER; 8];
-   
-   let mut sensors: [Option<SensType>; 8] = [ None, None, None, None, None, None, None, None, ];
-
-   let mut th: [(f32, f32); 8] = [(-500.0, -500.0); 8];
-
-   // Split the device and pass the virtual I2C devices to AHT20 driver
-   let switch1parts = switch1.split();
-
-   hprintln!("sensors ");
-   //  a loop for this should be possible, but my attempts cause lifetime problems.
-   let mut z = AHT20::new(switch1parts.i2c0,  S_ADDR);
-   hprintln!("sensor 0 ");
-   sensors[0] = match z.init(&mut delay) { Ok(v) => {Some(v)},  Err(_v) => {None} };
-   hprintln!("sensor 0 init");
-
-   let mut z = AHT20::new(switch1parts.i2c1,  S_ADDR);
-   hprintln!("sensor 1 ");
-   sensors[1] = match z.init(&mut delay) { Ok(v) => {Some(v)},  Err(_v) => {None} };
-   hprintln!("sensor 1 init");
-
-   let mut z = AHT20::new(switch1parts.i2c2,  S_ADDR);
-   hprintln!("sensor 2 ");
-   sensors[2] = match z.init(&mut delay) { Ok(v) => {Some(v)},  Err(_v) => {None} };
-   hprintln!("sensor 2 init");
-
-   let mut z = AHT20::new(switch1parts.i2c3,  S_ADDR);
-   sensors[3] = match z.init(&mut delay) { Ok(v) => {Some(v)},  Err(_v) => {None} };
-
-   let mut z = AHT20::new(switch1parts.i2c4,  S_ADDR);
-   sensors[4] = match z.init(&mut delay) { Ok(v) => {Some(v)},  Err(_v) => {None} };
-
-   let mut z = AHT20::new(switch1parts.i2c5,  S_ADDR);
-   sensors[5] = match z.init(&mut delay) { Ok(v) => {Some(v)},  Err(_v) => {None} };
-
-   let mut z = AHT20::new(switch1parts.i2c6,  S_ADDR);
-   sensors[6] = match z.init(&mut delay) { Ok(v) => {Some(v)},  Err(_v) => {None} };
-
-   let mut z = AHT20::new(switch1parts.i2c7,  S_ADDR);
-   sensors[7] = match z.init(&mut delay) { Ok(v) => {Some(v)},  Err(_v) => {None} };
-
-
-   //    screen[0].clear();
-   //    write!(screen[0], "    °C %RH").unwrap();
-
+//    /////////////////
 
     /////////////////////   lora
     hprintln!("lora");
     
-
     // cs is named nss on many radio_sx127x module boards
     let z = Sx127x::spi(spi, spiext.cs,  spiext.busy, spiext.ready, spiext.reset, delay, 
                    &CONFIG_RADIO ); 
 
     let mut lora =  match z {
-        Ok(lr)  => {show_message("lora setup ok", &mut disp);
+        Ok(lr)  => {show_message("lora setup ok", &mut display);
                     //hprintln!("lora setup completed.").unwrap();
                     lr
                    } 
-        Err(e)  => {show_message("lora setup Error", &mut disp);
+        Err(e)  => {show_message("lora setup Error", &mut display);
                     //hprintln!("Error in lora setup. {:?}", e).unwrap();
-                    asm::bkpt();
+                    //asm::bkpt();
                     panic!("{:?}", e) 
                    }
     };
@@ -444,7 +450,8 @@ fn main() -> ! {
       led.off();
       hprintln!("read sensors");
 
-      for i in 0..sensors.len() {
+      for i in 0..7 { // 7 is sensors.len(() 
+          hprintln!("sensor {}", i);
          th[i] =  match   &mut sensors[i] {
                                  Some(s) => {let v = s.measure(&mut delay2).unwrap();// uses a DelayNs
                                              (v.temperature, v.humidity)
@@ -457,11 +464,11 @@ fn main() -> ! {
 
 //      let mut ln = 1;  // screen line to write. rolls if number of sensors exceed DISPLAY_LINES
 
-      show_display(th, &mut disp);
+      show_display(th, &mut display);
 
       let message = form_message(th);
       hprintln!("message {:?}", message);
-      send(&mut lora, message, &mut disp);
+      send(&mut lora, message, &mut display);
 
       //delay.delay_ms(READ_INTERVAL);// treated as ms
       lora.delay_ms(READ_INTERVAL);  // treated as seconds
