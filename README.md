@@ -1,8 +1,4 @@
-STATUS:  Draft
-
-##  Contents
-
-See the auto-generated menu in the github README display (above right).
+STATUS:  bin aht20-driver roughly working. Looking for AHT10 crate.
 
 ## Summary
 
@@ -18,11 +14,11 @@ The intention is that code here should be stable and remain working for the hard
 The code in repository `rust-integration-testing` is intended for testing new versions of 
 crates and hals, and as a result is sometimes broken.
 
-As of December 2024 the preferred sensor crate is still under considertation. 
+As of January 2025 the preferred sensor crates are still under considertation. 
 For that reason there are mulitiple bin options, but not all work. 
 The multiplexer crate `xca9548a` uses `embedded-hal v1` and that implies sensor devices crates should also.
 Currently I have not found a good choice for an AHT10 driver crate using  `embedded-hal v1`.
-Testing is being done with AHT20. While many device crates compile, some have run time errors. 
+Testing is being mostly done with AHT20. While many device crates compile, some have run time errors. 
 See https://github.com/pdgilbert/i2c-test for more details. Based on test success there,
 and needs/nice properties below, attention is currently focussed on `aht20-driver` crate.
 
@@ -38,7 +34,7 @@ The device crate needs/nice properties:
  - It would be nice to allow for software reset so individual sensors can be reset without a power cycle.
  - Syncronous (blocking) is necessary (at the moment because of rtic difficulties) but
      the feature of getting both sync and async from the same crate is nice.
- - Prefer a release version rather than just github.
+ - Prefer a release version rather than just a repo version.
 
 For additional notes see 
 https://github.com/pdgilbert/rust-integration-testing/examples/misc-i2c-drivers/i2c-sensor-notes.txt
@@ -49,11 +45,12 @@ Check `Cargo.toml` and the code files to see exactly what is being used
 
  - `aht10`  Not using eh-1 and does not compile.
 
- - `aht20-blueluna` Uses eh-1. No release version. Consumes delay. Does not return Result.  Not compiling, lifetime problems.
+ - `aht20-blueluna` Uses eh-1. No release version. Consumes delay. Does not return Result.  
+              Not compiling, lifetime problems. Abandoned.
 
- - `embedded-aht20` Uses eh-1. Consumes delay. Both sync and async.  Compiles. Stalls at ..
+ - `embedded-aht20` Uses eh-1. Consumes delay. Both sync and async.  Compiles. Run stalls at ..
 
- - `aht20-driver`   Uses eh-1. Borrows delay. Compiles. 
+ - `aht20-driver`   Uses eh-1. Borrows delay. Compiles and works. 
 
 
 
