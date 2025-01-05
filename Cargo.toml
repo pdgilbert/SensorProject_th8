@@ -1,13 +1,14 @@
 # based on projects/temperature-display_no-rtic.rs
+# Use release version where possible
 
 [package]
 authors = ["Paul Gilbert"]
 categories = ["embedded", "no-std"]
 description = "module with 8 AHT10 temperature-humidity sensors, and MCU stm32f401"
-keywords = ["stm32f401", "i2c", "spi"]
+keywords = ["stm32f401", "i2c", "spi", "temperature", "humidity",]
 license = "MIT OR Apache-2.0"
 name = "th8-f401"
-version = "0.0.1"
+version = "0.0.2"
 edition = "2021"
 
 
@@ -35,49 +36,47 @@ opt-level = "s"
  
 [dependencies]
 
-cortex-m-semihosting   = ">=0.5.0"
+cortex-m-semihosting   = "0.5.0"
                                          
-stm32f4xx-hal = { git = "https://github.com/stm32-rs/stm32f4xx-hal" }
+stm32f4xx-hal = { git = "https://github.com/stm32-rs/stm32f4xx-hal", rev = "585dd0f304"} #working
+#stm32f4xx-hal = { git = "https://github.com/stm32-rs/stm32f4xx-hal"}
+#stm32f4xx-hal = 0.20.0     does not work for this
 
 embedded-hal        = "1.0"
 embedded-hal-bus    = "0.2.0"
 embedded-hal-async  = "1.0.0"
 embedded-io         = "0.6.1"
 
-nb = ">=1.1.0"
+nb = "1.1.0"
 libm = "0.2"
-cortex-m = ">=0.7"
-cortex-m-rt = ">=0.7.0"
+cortex-m = "0.7"
+cortex-m-rt = "0.7.0"
+panic-semihosting    = { version = "0.6.0" }
+panic-halt           = { version = "1.0.0" }
 
-panic-semihosting    = { version = ">=0.5.2" }
-panic-halt           = { version = ">=0.2.0" }
-
-heapless = "0.7"
-embedded-graphics = ">=0.7"
+heapless = "0.8.0"
+embedded-graphics = "0.8.1"
 
 # This radio-sx127 re-exports {Receive, Transmit} so insures correct radio version.
 radio-sx127x  = {  git = "https://github.com/pdgilbert/rust-radio-sx127x", default-features = false, branch = "ehal-1" }
 
 
-#ssd1306         = ">=0.8.0"   
-#ssd1306         = { git = "https://github.com/jamwaffles/ssd1306"  }  
-ssd1306         = { git = "https://github.com/sjoerdsimons/ssd1306", branch = "master"  } # embedded-hal-1.0.0
+ssd1306         = "0.9.0"    #working
+#ssd1306         = { git = "https://github.com/rust-embedded-community/ssd1306} 
 
-xca9548a         = ">=1.0.0"
+xca9548a         = "1.0.0"  #working
 #xca9548a         = { git = "https://github.com/eldruin/xca9548a-rs" }
-#xca9548a         = { git = "https://github.com/eldruin/xca9548a-rs", rev = "f7ef250" } 
 
 #aht10  looking for embedded-hal v1 crate
 #  See https://github.com/heyitsanthony/aht10/issues/2
 #aht10           = { git = "https://github.com/heyitsanthony/aht10" }
 #aht10           = { git = "https://github.com/andy31415/aht10", branch = "fix_status_check" }
-#aht10-async           = { git = "https://github.com/jneem/aht10-async" }  
+#aht10-async     = { git = "https://github.com/jneem/aht10-async" }  
 
 
 aht20-driver = { version = "2.0.0", default-features = false  }   # uses eh-1.  
 #  see https://github.com/anglerud/aht20-driver/blob/main/Cargo.toml
 #aht20-driver = { version = "2.0.0", default-features = false , features = ["use-defmt"] }  # makes bin big
-#  see https://github.com/anglerud/aht20-driver/blob/main/Cargo.toml
 
 #embedded-aht20   = { git = "https://github.com/ghismary/embedded-aht20" }
 embedded-aht20   = "0.1.3"     #eh-1 and both sync and async
