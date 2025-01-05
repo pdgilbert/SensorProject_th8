@@ -22,9 +22,11 @@ const MONITOR_ID: &str = option_env!("MONITOR_ID").expect("Txxx");
 const MONITOR_IDU : &[u8] = MONITOR_ID.as_bytes();
 
 const MODULE_CODE:  &str = "th8-f401 aht20"; //"th8-f401"; 
-const READ_INTERVAL:  u32 = 300;  // used as seconds  but 
-const BLINK_DURATION: u32 = 1;  // used as seconds  but  ms would be better
-const S_FMT:       usize  = 12;
+
+const READ_INTERVAL:  u32 = 600000; // used as ms 
+const BLINK_DURATION: u32 = 200;    // used as ms 
+
+const S_FMT:       usize  = 14;
 const MESSAGE_LEN: usize  = 16 * S_FMT;  
 
 
@@ -37,7 +39,7 @@ use panic_semihosting as _;
 use panic_halt as _;
 
 //use cortex_m_semihosting::{debug, hprintln};
-use cortex_m_semihosting::hprintln;
+//use cortex_m_semihosting::hprintln;   // this should be commented out to run without semihosting
 //use cortex_m::asm;
 use cortex_m_rt::entry;
 
@@ -175,25 +177,23 @@ use th8_f401::setup::{setup_from_dp, LED, Delay1Type};
         line.push(b'<').unwrap();
         
         for i in 0..th.len() {
-                hprintln!("xJ{}:({:.1},{:.0})x",  i+1, th[i].0, th[i].1); 
+                //hprintln!("xJ{}:({:.1},{:.0})x",  i+1, th[i].0, th[i].1); 
                 zz.clear();
                 write!(zz,  "J{}:({:.1},{:.0})",  i+1, th[i].0, th[i].1).unwrap(); // must not exceed S_FMT
                 for j in 0..zz.len() {line.push(zz[j]).unwrap()};
         };
 
         line.push(b'>').unwrap();
-        hprintln!("{:?}", line);
+        //hprintln!("{:?}", line);
 
         line
      }
-
 
     fn send(
             lora: &mut LoraType,
             m:  heapless::Vec<u8, MESSAGE_LEN>,
             disp: &mut Option<DisplayType>,
-           ) -> () {
-        
+           ) -> Result<bool, bool>{
         match lora.start_transmit(&m) {
             Ok(_b)   => {//show_message("start_transmit ok", disp);
                          //hprintln!("lora.start ok").unwrap()
@@ -205,19 +205,10 @@ use th8_f401::setup::{setup_from_dp, LED, Delay1Type};
 
         lora.delay_ms(10); // treated as seconds. Without some delay next returns bad. (interrupt may also be an option)
 
-        match lora.check_transmit() {
-            Ok(b)   => {if b {show_message("TX good", disp);
-                              //hprintln!("TX good").unwrap(); 
-                             }
-                        else {show_message("TX bad", disp);
-                              //hprintln!("TX bad").unwrap()
-                             }
-                       }
-            Err(_e) => {show_message("check_transmit Fail", disp);
-                        //hprintln!("check_transmit() Error. Should return True or False.").unwrap()
-                       }
-        };
-       ()
+        // return check_transmit() result could be returned, but this simplifies the reurn type from
+        // Result<bool, radio_sx127x::Error<HalError<stm32f4xx_hal::spi::Error, Infallible, Infallible>>>   
+        let r = lora.check_transmit();
+        match r { Ok(_b)   => {Result::Ok(true)}, Err(_e) => {Result::Err(false)} }
     }
 
 //////////////////////////  main  /////////////////////////////////////
@@ -225,7 +216,7 @@ use th8_f401::setup::{setup_from_dp, LED, Delay1Type};
 #[entry]
 fn main() -> ! {
 
-    hprintln!("t8-f401");
+    //hprintln!("t8-f401");
 
     let dp = Peripherals::take().unwrap();
 
@@ -247,7 +238,7 @@ fn main() -> ! {
     show_message(MODULE_CODE, &mut display);
 
     delay.delay_ms(2000); // treated as ms
-    hprintln!("display initialized.");
+    //hprintln!("display initialized.");
 
 
    
@@ -269,21 +260,18 @@ fn main() -> ! {
     
     let mut sensors: [Option<SensType>; 8] = [ None, None, None, None, None, None, None, None, ];
 
-    let mut th: [(f32, f32); 8] = [(-500.0, -500.0); 8];
+    let mut th: [(f32, f32); 8] = [(-50.0, -50.0); 8];  //default values for no sensor
 
     // Split the device and pass the virtual I2C devices to sensor driver
     let switch1parts = switch1.split();
 
     //  a loop for this should be possible, but my attempts cause lifetime problems.
 
-    hprintln!("sensor 0a ");
     let mut z = AHT20::new(switch1parts.i2c0,  S_ADDR);
     sensors[0] = match z.init(&mut delay) { Ok(v) => {Some(v)},  Err(_e) => {None} };
-    hprintln!("sensor 0b ");
 
     let mut z = AHT20::new(switch1parts.i2c1,  S_ADDR);
     sensors[1] = match z.init(&mut delay) { Ok(v) => {Some(v)},  Err(_e) => {None} };
-    hprintln!("sensor 1 ");
 
     let mut z = AHT20::new(switch1parts.i2c2,  S_ADDR);
     sensors[2] = match z.init(&mut delay) { Ok(v) => {Some(v)},  Err(_e) => {None} };
@@ -304,7 +292,7 @@ fn main() -> ! {
     sensors[7] = match z.init(&mut delay) { Ok(v) => {Some(v)},  Err(_e) => {None} };
 
     /////////////////  don't need this if there is no screen
-    hprintln!("Sensors in use:");
+    //hprintln!("Sensors in use:");
     show_message("Sensors in use:", &mut display);
 
 //    screen[0].clear();
@@ -324,7 +312,7 @@ fn main() -> ! {
 //    /////////////////
 
     /////////////////////   lora
-    hprintln!("lora");
+    //hprintln!("lora");
     
     // cs is named nss on many radio_sx127x module boards
     let z = Sx127x::spi(spi, spiext.cs,  spiext.busy, spiext.ready, spiext.reset, delay, 
@@ -346,21 +334,20 @@ fn main() -> ! {
     //delay consumed by lora. It is available in lora BUT treats arg as seconds not ms!!
     lora.delay_ms(1);  // arg is being treated as seconds
 
-    hprintln!("loop");
+    //hprintln!("loop");
     
     loop {
-      led.on(); 
-      lora.delay_ms(BLINK_DURATION);  // arg is being treated as seconds
+      led.on();
+      delay2.delay_ms(BLINK_DURATION);// treated as ms
       led.off();
-      hprintln!("read sensors");
-
+ 
       for i in 0..7 { // 7 is sensors.len(() 
-          hprintln!("sensor {}", i);
+         // hprintln!("sensor {}", i);
          th[i] =  match   &mut sensors[i] {
                                  Some(s) => {let v = s.measure(&mut delay2).unwrap();// uses a DelayNs
                                              (v.temperature, v.humidity)
                                             },  
-                                 None    => {(-500.0, -500.0)}, // default to transmit for no sensor 
+                                 None    => {(-50.0, -50.0)}, // default to transmit for no sensor 
                                 };
       };
 
@@ -371,10 +358,24 @@ fn main() -> ! {
       show_display(th, &mut display);
 
       let message = form_message(th);
-      hprintln!("message {:?}", message);
-      send(&mut lora, message, &mut display);
-
-      //delay.delay_ms(READ_INTERVAL);// treated as ms
-      lora.delay_ms(READ_INTERVAL);  // treated as seconds
+      //hprintln!("message {:?}", message);
+      //hprintln!("send message");
+      let r = send(&mut lora, message, &mut display);
+      delay2.delay_ms(READ_INTERVAL);// delay here leave temp/humidity on screen longer
+      
+      match r {
+            Ok(b)   => {if b {show_message("TX good", &mut display);
+                              //hprintln!("TX good").unwrap(); 
+                             }
+                        else {show_message("TX bad", &mut display);
+                              //hprintln!("TX bad").unwrap()
+                             }
+                       }
+            Err(_e) => {show_message("transmit failed", &mut display);
+                        //hprintln!("check_transmit() Error. Should return True or False.").unwrap()
+                       }
+        };
+ 
+      //delay2.delay_ms(READ_INTERVAL);// treated as ms
     }
 }
