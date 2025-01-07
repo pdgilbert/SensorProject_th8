@@ -112,10 +112,10 @@ type LoraType = Sx127x<Base<Spi<SPI1>, Pin<'A', 4, Output>, Pin<'B', 4>, Pin<'B'
 
 /////////////////////  local libs  //////////////////////////////////
 
-use th8_f401::lora::Base;
-use th8_f401::lora::{CONFIG_RADIO};
+use th8::lora::Base;
+use th8::lora::{CONFIG_RADIO};
 
-use th8_f401::setup::{setup_from_dp, LED, Delay1Type};
+use th8::setup::{setup_from_dp, LED, Delay1Type};
 
 
 /////////////////////////// functions ////////////////////////////////////////

@@ -3,7 +3,7 @@ STATUS:  bin aht20-driver roughly working. Looking for AHT10 crate.
 ## Summary
 
 This crate has code for a hardware design as in repository
-https://github.com/pdgilbert/SensorProject_th8-f401-pcb.
+https://github.com/pdgilbert/multiplexI2C.
 It measures temperature and humidity from eight sensors on a multiplexer. 
 The measurements are transmitted by LoRa and optionally displayed on an SSD1306.
 

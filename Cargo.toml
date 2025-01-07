@@ -7,7 +7,7 @@ categories = ["embedded", "no-std"]
 description = "module with 8 AHT10 temperature-humidity sensors, and MCU stm32f401"
 keywords = ["stm32f401", "i2c", "spi", "temperature", "humidity",]
 license = "MIT OR Apache-2.0"
-name = "th8-f401"
+name = "th8"
 version = "0.0.2"
 edition = "2021"
 

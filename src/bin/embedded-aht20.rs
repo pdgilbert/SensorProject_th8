@@ -95,8 +95,8 @@ use xca9548a::{SlaveAddr as XcaSlaveAddr, Xca9548a, I2cSlave};
 
 /////////////////////  lora
 
-use th8_f401::lora::Base;
-use th8_f401::lora::{CONFIG_RADIO};
+use th8::lora::Base;
+use th8::lora::{CONFIG_RADIO};
 
 use radio_sx127x::{
     Transmit,  // trait needs to be in scope to find  methods start_transmit and check_transmit.
