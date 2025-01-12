@@ -107,8 +107,11 @@ use radio_sx127x::{
 
 };
 
-//type LoraType = Sx127x<Base<Spi<SPI1>, Pin<'A', 4, Output>, Pin<'B', 4>, Pin<'B', 5>, Pin<'A', 0, Output>, timDelay<TIM5, 1000000>>>;
-type LoraType = Sx127x<Base<Spi<SPI1>, Pin<'A', 4, Output>, Pin<'B', 4>, Pin<'B', 5>, Pin<'A', 0, Output>, Delay1Type>>;
+// This should use Spi and SpiExt so pin setting is all done in setup, but that
+// requires Sx127x/Base using the two groups rather than all the individual pins.
+
+//type LoraType = Sx127x<Base<Spi<SPI1>, Pin<'A', 4, Output>, Pin<'B', 4>, Pin<'B', 5>, Pin<'A', 1, Output>, timDelay<TIM5, 1000000>>>;
+type LoraType = Sx127x<Base<Spi<SPI1>, Pin<'A', 4, Output>, Pin<'B', 4>, Pin<'B', 5>, Pin<'A', 1, Output>, Delay1Type>>;
 
 /////////////////////  local libs  //////////////////////////////////
 

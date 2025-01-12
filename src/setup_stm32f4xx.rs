@@ -7,7 +7,7 @@ use stm32f4xx_hal::{
       spi::{Spi},
       i2c::I2c as I2cType,   //this is a type
       gpio::{Output, PushPull, GpioExt, Input,
-             gpioa::{PA0, PA4, },
+             gpioa::{PA1, PA4, },
              gpiob::{PB4, PB5, },
              gpioc::{PC13 as LEDPIN}
       },
@@ -38,7 +38,7 @@ impl LED for LedType {}
 type Cs    = PA4<Output<PushPull>>;
 type Busy  = PB4<Input<>>;
 type Ready = PB5<Input<>>;
-type Reset = PA0<Output<PushPull>>;
+type Reset = PA1<Output<PushPull>>;
 
 pub struct SpiExt { pub cs:    Cs, 
                     pub busy:  Busy, 
@@ -93,7 +93,7 @@ pub fn setup_from_dp(dp: Peripherals) -> (
         cs:    gpioa.pa4.into_push_pull_output(), //CsPin         
         busy:  gpiob.pb4.into_floating_input(),   //BusyPin  DI00 
         ready: gpiob.pb5.into_floating_input(),   //ReadyPin DI01 
-        reset: gpioa.pa0.into_push_pull_output(), //ResetPin   
+        reset: gpioa.pa1.into_push_pull_output(), //ResetPin   
         };   
 
 
