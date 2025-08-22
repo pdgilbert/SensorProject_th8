@@ -23,7 +23,7 @@ const MONITOR_IDU : &[u8] = MONITOR_ID.as_bytes();
 
 const MODULE_CODE:  &str = "th8-f401 aht20"; //"th8-f401"; 
 
-const READ_INTERVAL:  u32 = 600000; // used as ms 
+const READ_INTERVAL:  u32 = 10000;  //600000; // used as ms 
 const BLINK_DURATION: u32 = 200;    // used as ms 
 
 const S_FMT:       usize  = 14;
@@ -132,10 +132,11 @@ use th8::setup::{setup_from_dp, LED, Delay1Type};
        let mut line: heapless::String<128> = heapless::String::new(); // \n to separate lines
            
        // Consider handling error in next. If line is too short then attempt to write it crashes
-       write!(line,   "{}°C {}%RH {}°C {}%RH\n",  th[0].0, th[0].1,  th[1].0, th[1].1 ).unwrap();
-       write!(line,   "{}°C {}%RH {}°C {}%RH\n",  th[2].0, th[2].1,  th[3].0, th[3].1 ).unwrap();
-       write!(line,   "{}°C {}%RH {}°C {}%RH\n",  th[4].0, th[4].1,  th[5].0, th[5].1 ).unwrap();
-    //too long   write!(line,   "{}°C {}%RH {}°C {}%RH\n",  th[6].0, th[6].1,  th[7].0, th[7].1 ).unwrap();
+       write!(line,   "{:.0}°{:.0}% {:.0}°{:.0}%\n",  th[0].0, th[0].1,  th[1].0, th[1].1 ).unwrap();
+       write!(line,   "{:.0}°{:.0}% {:.0}°{:.0}%\n",  th[2].0, th[2].1,  th[3].0, th[3].1 ).unwrap();
+       write!(line,   "{:.0}°{:.0}% {:.0}°{:.0}%\n",  th[4].0, th[4].1,  th[5].0, th[5].1 ).unwrap();
+       write!(line,   "{:.0}°{:.0}% {:.0}°{:.0}%\n",  th[6].0, th[6].1,  th[7].0, th[7].1 ).unwrap();
+    //too long   write!(line,   "{:.1}°C {:.0}%RH {}°C {}%RH\n",  th[6].0, th[6].1,  th[7].0, th[7].1 ).unwrap();
 
    // CHECK SIGN IS CORRECT FOR -0.3 C
 
@@ -224,11 +225,13 @@ fn main() -> ! {
     let dp = Peripherals::take().unwrap();
 
     let (i2c1, i2c2, spi, spiext, mut led, mut delay, mut delay2) =  setup_from_dp(dp);
+    led.blink(1000, &mut delay2);
+    delay2.delay_ms(500); 
 
     /////////////////////   ssd
 
     let interface = I2CDisplayInterface::new(i2c2); //default address 0x3C
-
+    
     let mut z = Ssd1306::new(interface, DISPLAYSIZE, DisplayRotation::Rotate0);
 
     let mut display: Option<DisplayType> = match z.init() {
@@ -240,9 +243,10 @@ fn main() -> ! {
 
     show_message(MODULE_CODE, &mut display);
 
-    delay.delay_ms(2000); // treated as ms
     //hprintln!("display initialized.");
 
+    led.blink(1000, &mut delay2);
+    delay2.delay_ms(500); 
 
    
     /////////////////////  xca   multiple devices on i2c bus
@@ -272,31 +276,56 @@ fn main() -> ! {
 
     let mut z = AHT20::new(switch1parts.i2c0,  S_ADDR);
     sensors[0] = match z.init(&mut delay) { Ok(v) => {Some(v)},  Err(_e) => {None} };
+    led.blink(50, &mut delay);
+    delay2.delay_ms(500);
 
     let mut z = AHT20::new(switch1parts.i2c1,  S_ADDR);
     sensors[1] = match z.init(&mut delay) { Ok(v) => {Some(v)},  Err(_e) => {None} };
+    led.blink(50, &mut delay);
+    delay2.delay_ms(500);
 
     let mut z = AHT20::new(switch1parts.i2c2,  S_ADDR);
     sensors[2] = match z.init(&mut delay) { Ok(v) => {Some(v)},  Err(_e) => {None} };
+    led.blink(50, &mut delay);
+    delay2.delay_ms(500);
 
     let mut z = AHT20::new(switch1parts.i2c3,  S_ADDR);
     sensors[3] = match z.init(&mut delay) { Ok(v) => {Some(v)},  Err(_e) => {None} };
+    led.blink(50, &mut delay);
+    delay2.delay_ms(500);
 
     let mut z = AHT20::new(switch1parts.i2c4,  S_ADDR);
     sensors[4] = match z.init(&mut delay) { Ok(v) => {Some(v)},  Err(_e) => {None} };
+    led.blink(50, &mut delay);
+    delay2.delay_ms(500);
 
     let mut z = AHT20::new(switch1parts.i2c5,  S_ADDR);
     sensors[5] = match z.init(&mut delay) { Ok(v) => {Some(v)},  Err(_e) => {None} };
+    led.blink(50, &mut delay);
+    delay2.delay_ms(500);
 
     let mut z = AHT20::new(switch1parts.i2c6,  S_ADDR);
     sensors[6] = match z.init(&mut delay) { Ok(v) => {Some(v)},  Err(_e) => {None} };
+    led.blink(50, &mut delay);
+    delay2.delay_ms(500);
 
     let mut z = AHT20::new(switch1parts.i2c7,  S_ADDR);
     sensors[7] = match z.init(&mut delay) { Ok(v) => {Some(v)},  Err(_e) => {None} };
+    led.blink(50, &mut delay);
+    delay2.delay_ms(500);
 
     /////////////////  don't need this if there is no screen
     //hprintln!("Sensors in use:");
     show_message("Sensors in use:", &mut display);
+
+    led.blink(1000, &mut delay2);
+    delay2.delay_ms(500); 
+
+    for  i in 0..7 {  // 7 is sensors.len(() 
+       if  sensors[i].is_some() {led.blink(50, &mut delay)}
+       else {led.blink(1000, &mut delay)};
+    };
+
 
 //    screen[0].clear();
 //    screen[1].clear();
@@ -335,14 +364,15 @@ fn main() -> ! {
  
 
     //delay consumed by lora. It is available in lora BUT treats arg as seconds not ms!!
+
+    led.blink(1000, &mut delay2);
+    //delay2.delay_ms(500); 
     lora.delay_ms(1);  // arg is being treated as seconds
 
     //hprintln!("loop");
     
     loop {
-      led.on();
-      delay2.delay_ms(BLINK_DURATION);// treated as ms
-      led.off();
+      led.blink(BLINK_DURATION, &mut delay2);// treated as ms
  
       for i in 0..7 { // 7 is sensors.len(() 
          // hprintln!("sensor {}", i);

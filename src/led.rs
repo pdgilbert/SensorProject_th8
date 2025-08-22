@@ -14,12 +14,12 @@ pub trait LED: OutputPin {  // see The Rust Programming Language, section 19, Us
         self.set_high().unwrap()
     }
 
-    // Note these default methods use delay so DO NOT USE IN rtic.
+    // Note the default method uses delay so do not use in rtic.
 
-    fn blink(&mut self, time: u16, delay: &mut impl DelayNs) -> () {
+    fn blink(&mut self, time: u32, mut delay: impl DelayNs) -> () {
         self.on();
-        delay.delay_ms(time.into());
+        delay.delay_ms(time);
         self.off();
-        delay.delay_ms(time.into()); //off for time it was on. consider delay.delay_ms(500);
+        delay.delay_ms(500); //off for 500;
     }
 }
