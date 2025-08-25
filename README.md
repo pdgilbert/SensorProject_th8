@@ -58,13 +58,13 @@ Check `Cargo.toml` and the code files to see exactly what is being used
 
 Choose the binary in following
 
-```
+``` 401 to 411
 MONITOR_ID="whatever"  cargo build --no-default-features  --target thumbv7em-none-eabihf --features stm32f401   --bin aht10
 MONITOR_ID="whatever"  cargo build --no-default-features  --target thumbv7em-none-eabihf --features stm32f401   --bin aht20-driver
 MONITOR_ID="whatever"  cargo build --no-default-features  --target thumbv7em-none-eabihf --features stm32f401   --bin embedded-aht20
 ```
 
-MONITOR_ID is optional. If not supplied "Txxx" will be used. 
+MONITOR_ID is optional. If not supplied "THxx" will be used. 
 If the binary is too large then `--release` is needed.
 
 ## Loading
@@ -81,7 +81,10 @@ In another window do
 ```
 MONITOR_ID="whatever"  cargo  run --no-default-features --target thumbv7em-none-eabihf --features stm32f401 --bin aht20-driver
 ```
-
+or
+```
+MONITOR_ID="whatever"  cargo  run --no-default-features --target thumbv7em-none-eabihf --features stm32f401,no_ssd_display --bin aht20-driver
+```
 
 
 ## License

@@ -1,34 +1,38 @@
-//! Measure temperature and humidity on eight AHT20 sensors on I2C1, multiplexed with crate 
+//! Measure temperature and humidity on eight AHT10 or AHT20 sensors on I2C1, multiplexed with crate 
+//! (The aht20-driver crate seems to work also with aht10 sensors.)
+//! TESTING WITH EARLY PROTOTYPE  sensors on I2C1,  SSD1306 on I2C2.
+//! CONSIDER REVERSE AS ON T16
 //! xcs9548a because all sensors use the same address.
-//! Display using SSD1306 on I2C2. Transmit with LoRa on SPI.
+//! (Optionally) Display using SSD1306 on I2C2.
+//! Transmit with LoRa on SPI.
 
-//  To Do:
-//    - make work better.
+//! Status: 
+
+//!  To Do:
+//!    - decide I2C1 or I2C2 for ssd or sensors.
+//!    - optional display could be detected rather than indicated by feature no_ssd_display.
+
+// set this with
+// MONITOR_ID="whatever" cargo build ...
+// MONITOR_ID="whatever"  cargo  run --no-default-features --target thumbv7em-none-eabihf --features stm32f401 --bin aht20-driver
+// MONITOR_ID="whatever"  cargo  run --no-default-features --target thumbv7em-none-eabihf --features no_ssd_displaystm32f401 --bin aht20-driver
+// or  cargo:rustc-env=MONITOR_ID="whatever"
+
+///////////////////// 
 
 #![deny(unsafe_code)]
 #![no_std]
 #![no_main]
 #![feature(type_alias_impl_trait)]
 
-///////////////////// 
-
-// set this with
-// MONITOR_ID="whatever" cargo build ...
-// or  cargo:rustc-env=MONITOR_ID="whatever"
-//  run with
-// MONITOR_ID="whatever"  cargo  run --no-default-features --target thumbv7em-none-eabihf --features stm32f401 --bin aht20-driver
-
-const MONITOR_ID: &str = option_env!("MONITOR_ID").expect("Txxx");
+const MONITOR_ID: &str = option_env!("MONITOR_ID").expect("THxx");
 const MONITOR_IDU : &[u8] = MONITOR_ID.as_bytes();
 
-const MODULE_CODE:  &str = "th8-f401 aht20"; //"th8-f401"; 
-
-const READ_INTERVAL:  u32 = 10000;  //600000; // used as ms 
-const BLINK_DURATION: u32 = 200;    // used as ms 
-
+const MODULE_CODE:  &str = "th8-f411 aht20";
+const READ_INTERVAL:  u32 = 600; // used as seconds 
+const BLINK_DURATION: u32 = 40;   // used as ms
 const S_FMT:       usize  = 14;
 const MESSAGE_LEN: usize  = 16 * S_FMT;  
-
 
 //////////////////// 
 
@@ -40,23 +44,65 @@ use panic_halt as _;
 
 //use cortex_m_semihosting::{debug, hprintln};
 //use cortex_m_semihosting::hprintln;   // this should be commented out to run without semihosting
-//use cortex_m::asm;
+//use cortex_m::asm; // for delay
 use cortex_m_rt::entry;
 
 use core::fmt::Write;
 
-/////////////////////////////   hals  //////////////////////////////////
-
-use embedded_hal::delay::DelayNs;
-
 use stm32f4xx_hal::{
-    pac::{Peripherals, I2C1, I2C2, SPI1,},
+    pac::{Peripherals, I2C1, I2C2, SPI1, TIM5},
+    rcc::{RccExt},
     spi::{Spi},
-    i2c::I2c as I2cType,   //this is a type vs  embedded_hal::i2c::I2c trait
-    gpio::{Output, },
+    i2c::I2c,   //this is a type vs  embedded_hal::i2c::I2c trait
+    gpio::{Output, PushPull, GpioExt, Input},
     gpio::{Pin}, 
+    gpio::{gpioa::{PA1, PA4, }},
+    gpio::{gpiob::{PB4, PB5, }},  
+    gpio::{gpioc::{PC13}},
+    prelude::*,
+    //block,
+    timer::{Delay as halDelay},
+    timer::{TimerExt},
 };
 
+use embedded_hal::{spi::{Mode, Phase, Polarity},
+                   delay::DelayNs,
+                   digital::OutputPin,
+};
+
+
+//////////////////////  ssd display  
+
+// See https://docs.rs/embedded-graphics/0.7.1/embedded_graphics/mono_font/index.html re fonts
+
+use embedded_graphics::{
+    mono_font::{iso_8859_1::FONT_8X13 as FONT, MonoTextStyleBuilder}, // need iso for degree symbol
+    pixelcolor::BinaryColor,
+    prelude::*,
+    text::{Baseline, Text},
+};
+
+//common display sizes are 128x64 and 128x32
+type  DisplaySizeType = ssd1306::prelude::DisplaySize128x64;
+const DISPLAYSIZE: DisplaySizeType = DisplaySize128x64;
+type  DisplayType = Ssd1306<I2CInterface<I2c<I2C2>>, DisplaySizeType, BufferedGraphicsMode<DisplaySizeType>>;
+
+use ssd1306::{mode::BufferedGraphicsMode, prelude::*, I2CDisplayInterface, Ssd1306};
+
+
+/////////////////////  lora  //////////////////////////////////
+
+use th8::lora::Base;
+use th8::lora::{CONFIG_RADIO};
+
+use radio_sx127x::{
+    Transmit,  // trait needs to be in scope to find  methods start_transmit and check_transmit.
+    //Error as sx127xError, // Error name conflict with hals
+    prelude::*, // prelude has Sx127x,
+    //device::regs::Register, // for config examination on debugging
+    // read_register, get_mode, get_signal_bandwidth, get_coding_rate_4, get_spreading_factor,
+
+};
 
 
 //////////////////////  sensor crate  //////////////////////////////////
@@ -70,55 +116,35 @@ use aht20_driver::{AHT20, AHT20Initialized, SENSOR_ADDRESS as S_ADDR};
 use xca9548a::{SlaveAddr as XcaSlaveAddr, Xca9548a, I2cSlave}; 
 
 
-//////////////////////  display  //////////////////////////////////
+//   //////////////////////////////////////////////////////////////////////
 
-use ssd1306::{mode::BufferedGraphicsMode, prelude::*, I2CDisplayInterface, Ssd1306};
+trait LED: OutputPin {  // see The Rust Programming Language, section 19, Using Supertraits...
+    // depending on board wiring, on may be set_high or set_low, with off also reversed
+    // A default of set_low() for on is defined here, but implementation should deal with a difference
+    fn on(&mut self) -> () {
+        self.set_low().unwrap()
+    }
+    fn off(&mut self) -> () {
+        self.set_high().unwrap()
+    }
 
-use embedded_graphics::{
-    mono_font::{iso_8859_1::FONT_8X13 as FONT, MonoTextStyleBuilder},      // need iso for degree symbol
-    pixelcolor::BinaryColor,
-    prelude::*,
-    text::{Baseline, Text},
+}
+
+impl LED for  PC13<Output<PushPull>> {}    
+
+struct SpiExt {  cs:    PA4<Output<PushPull>>, 
+                 busy:  PB4<Input<>>, 
+                 ready: PB5<Input<>>, 
+                 reset: PA1<Output<PushPull>>
+}
+
+const MODE: Mode = Mode {
+    //  SPI mode for radio
+    phase: Phase::CaptureOnSecondTransition,
+    polarity: Polarity::IdleHigh,
 };
 
-type  DisplaySizeType = ssd1306::prelude::DisplaySize128x64;
-type  DisplayType = Ssd1306<I2CInterface<I2cType<I2C2>>, DisplaySizeType, BufferedGraphicsMode<DisplaySizeType>>;
-
-// Note: The screen layout accommodates no more than 4 sensors installed! If more are installed then
-//       the code will probably panic trying to write beyond the limit of the screen variable.
-const ROTATION: DisplayRotation = DisplayRotation::Rotate0;   // 0, 90, 180, 270
-const DISPLAYSIZE: DisplaySizeType = DisplaySize128x64;
-const PPC: usize = 12;  // verticle pixels per character plus space for FONT_6X10 
-const DISPLAY_LINES: usize = 6;     // in characters for 128x64   Rotate0
-const DISPLAY_COLUMNS: usize = 20;  // in characters   Rotate0
-const R_VAL: heapless::String<DISPLAY_COLUMNS> = heapless::String::new();
-
-type  ScreenType = [heapless::String<DISPLAY_COLUMNS>; DISPLAY_LINES];
-
-
-/////////////////////  lora  //////////////////////////////////
-
-use radio_sx127x::{
-    Transmit,  // trait needs to be in scope to find  methods start_transmit and check_transmit.
-    //Error as sx127xError, // Error name conflict with hals
-    prelude::*, // prelude has Sx127x,
-    //device::regs::Register, // for config examination on debugging
-    // read_register, get_mode, get_signal_bandwidth, get_coding_rate_4, get_spreading_factor,
-
-};
-
-// This should use Spi and SpiExt so pin setting is all done in setup, but that
-// requires Sx127x/Base using the two groups rather than all the individual pins.
-
-//type LoraType = Sx127x<Base<Spi<SPI1>, Pin<'A', 4, Output>, Pin<'B', 4>, Pin<'B', 5>, Pin<'A', 1, Output>, timDelay<TIM5, 1000000>>>;
-type LoraType = Sx127x<Base<Spi<SPI1>, Pin<'A', 4, Output>, Pin<'B', 4>, Pin<'B', 5>, Pin<'A', 1, Output>, Delay1Type>>;
-
-/////////////////////  local libs  //////////////////////////////////
-
-use th8::lora::Base;
-use th8::lora::{CONFIG_RADIO};
-
-use th8::setup::{setup_from_dp, LED, Delay1Type};
+//use th8::setup::{setup_from_dp, LED, Delay1Type};
 
 
 /////////////////////////// functions ////////////////////////////////////////
@@ -130,6 +156,10 @@ use th8::setup::{setup_from_dp, LED, Delay1Type};
     {    
      if disp.is_some() { // show_message does nothing if disp is None. 
        let mut line: heapless::String<128> = heapless::String::new(); // \n to separate lines
+
+       // Note: The screen layout accommodates no more than 4 sensors installed! 
+       // If more are installed then the code will probably panic 
+       // trying to write beyond the limit of the screen variable.
            
        // Consider handling error in next. If line is too short then attempt to write it crashes
        write!(line,   "{:.0}°{:.0}% {:.0}°{:.0}%\n",  th[0].0, th[0].1,  th[1].0, th[1].1 ).unwrap();
@@ -193,6 +223,9 @@ use th8::setup::{setup_from_dp, LED, Delay1Type};
         line
      }
 
+    //type LoraType = Sx127x<Base<Spi<SPI1>, Pin<'A', 4, Output>, Pin<'B', 4>, Pin<'B', 5>, Pin<'A', 0, Output>, halDelay<TIM5, 1000000>>>;
+    type LoraType = Sx127x<Base<Spi<SPI1>, Pin<'A', 4, Output>, Pin<'B', 4>, Pin<'B', 5>, Pin<'A', 1, Output>, halDelay<TIM5, 1000000>>>;
+
     fn send(
             lora: &mut LoraType,
             m:  heapless::Vec<u8, MESSAGE_LEN>,
@@ -220,22 +253,74 @@ use th8::setup::{setup_from_dp, LED, Delay1Type};
 #[entry]
 fn main() -> ! {
 
-    //hprintln!("t8-f401");
+    //hprintln!("t8-f411");
 
     let dp = Peripherals::take().unwrap();
 
-    let (i2c1, i2c2, spi, spiext, mut led, mut delay, mut delay2) =  setup_from_dp(dp);
-    led.blink(1000, &mut delay2);
-    delay2.delay_ms(500); 
+
+    let mut rcc = dp.RCC.constrain();
+    
+    let gpioa = dp.GPIOA.split(&mut rcc);
+    let gpiob = dp.GPIOB.split(&mut rcc);
+    let gpioc = dp.GPIOC.split(&mut rcc);
+
+    let scl = gpiob.pb8.into_alternate_open_drain(); 
+    let sda = gpiob.pb9.into_alternate_open_drain(); // not pb6, should be pb7 or pb9 on pins 43 or 46
+    let i2c1 = I2c::new(dp.I2C1, (scl, sda), 400.kHz(), &mut rcc);
+
+    let scl = gpiob.pb10.into_alternate_open_drain();
+    let sda = gpiob.pb3.into_alternate_open_drain();
+    let i2c2 = I2c::new(dp.I2C2, (scl, sda), 400.kHz(), &mut rcc);
+
+    let mut led = gpioc.pc13.into_push_pull_output();
+    led.off();
+
+    let spi = Spi::new(
+        dp.SPI1,
+        (
+            Some(gpioa.pa5.into_alternate()), // sck  
+            Some(gpioa.pa6.into_alternate()), // miso 
+            Some(gpioa.pa7.into_alternate()), // mosi 
+        ),
+        MODE, 8.MHz(), &mut rcc,
+    );
+    
+    let spiext = SpiExt {
+         cs:    gpioa.pa4.into_push_pull_output(), //CsPin         
+         busy:  gpiob.pb4.into_floating_input(),   //BusyPin  DI00 
+         ready: gpiob.pb5.into_floating_input(),   //ReadyPin DI01 
+         reset: gpioa.pa1.into_push_pull_output(), //ResetPin   
+         };   
+
+
+    let mut delay = dp.TIM2.delay::<1000000>(&mut rcc);
+    let delay_for_lora = dp.TIM5.delay(&mut rcc);
+
+    led.off();
+    delay.delay_ms(2000); // treated as ms
+    led.on();
+    delay.delay_ms(BLINK_DURATION); // treated as ms
+    led.off();
 
     /////////////////////   ssd
 
     let interface = I2CDisplayInterface::new(i2c2); //default address 0x3C
     
-    let mut z = Ssd1306::new(interface, DISPLAYSIZE, DisplayRotation::Rotate0);
+    let mut z = Ssd1306::new(interface, DISPLAYSIZE, DisplayRotation::Rotate0).into_buffered_graphics_mode();
 
+    //hprintln!("display initializing.");
+
+    // disp is Optional because ssd screen may not be plugged in. 
+    // It would be nice if it could set None if init fails, but so far not luck, so use cfg
+    // If it is None then messages displays are skipped.
+
+
+    #[cfg(feature = "no_ssd_display")]
+    let mut display: Option<DisplayType> = None;
+
+    #[cfg(not(feature = "no_ssd_display"))]
     let mut display: Option<DisplayType> = match z.init() {
-        Ok(_d)  => {Some(z.into_buffered_graphics_mode())} 
+        Ok(_d)  => {Some(z)} 
         Err(_e) => {None}
     };
 
@@ -243,10 +328,8 @@ fn main() -> ! {
 
     show_message(MODULE_CODE, &mut display);
 
-    //hprintln!("display initialized.");
-
-    led.blink(1000, &mut delay2);
-    delay2.delay_ms(500); 
+    delay.delay_ms(2000); // treated as ms
+    //hprintln!("display init done.");
 
    
     /////////////////////  xca   multiple devices on i2c bus
@@ -257,7 +340,7 @@ fn main() -> ! {
 
     /////////////////////  sensors on xca    // Start the sensors.
 
-    type I2c1Type = I2cType<I2C1>;
+    type I2c1Type = I2c<I2C1>;
     type SensType<'a> = AHT20Initialized<'a, I2cSlave<'a, Xca9548a<I2c1Type>, I2c1Type>>;
 
     //  Option allows for the possibility that some sensors are missing.
@@ -276,55 +359,51 @@ fn main() -> ! {
 
     let mut z = AHT20::new(switch1parts.i2c0,  S_ADDR);
     sensors[0] = match z.init(&mut delay) { Ok(v) => {Some(v)},  Err(_e) => {None} };
-    led.blink(50, &mut delay);
-    delay2.delay_ms(500);
+ 
+    delay.delay_ms(500);
 
     let mut z = AHT20::new(switch1parts.i2c1,  S_ADDR);
     sensors[1] = match z.init(&mut delay) { Ok(v) => {Some(v)},  Err(_e) => {None} };
-    led.blink(50, &mut delay);
-    delay2.delay_ms(500);
+    delay.delay_ms(500);
 
     let mut z = AHT20::new(switch1parts.i2c2,  S_ADDR);
     sensors[2] = match z.init(&mut delay) { Ok(v) => {Some(v)},  Err(_e) => {None} };
-    led.blink(50, &mut delay);
-    delay2.delay_ms(500);
+    delay.delay_ms(500);
 
     let mut z = AHT20::new(switch1parts.i2c3,  S_ADDR);
     sensors[3] = match z.init(&mut delay) { Ok(v) => {Some(v)},  Err(_e) => {None} };
-    led.blink(50, &mut delay);
-    delay2.delay_ms(500);
+    delay.delay_ms(500);
 
     let mut z = AHT20::new(switch1parts.i2c4,  S_ADDR);
     sensors[4] = match z.init(&mut delay) { Ok(v) => {Some(v)},  Err(_e) => {None} };
-    led.blink(50, &mut delay);
-    delay2.delay_ms(500);
+    delay.delay_ms(500);
 
     let mut z = AHT20::new(switch1parts.i2c5,  S_ADDR);
     sensors[5] = match z.init(&mut delay) { Ok(v) => {Some(v)},  Err(_e) => {None} };
-    led.blink(50, &mut delay);
-    delay2.delay_ms(500);
+    delay.delay_ms(500);
 
     let mut z = AHT20::new(switch1parts.i2c6,  S_ADDR);
     sensors[6] = match z.init(&mut delay) { Ok(v) => {Some(v)},  Err(_e) => {None} };
-    led.blink(50, &mut delay);
-    delay2.delay_ms(500);
+    delay.delay_ms(500);
 
     let mut z = AHT20::new(switch1parts.i2c7,  S_ADDR);
     sensors[7] = match z.init(&mut delay) { Ok(v) => {Some(v)},  Err(_e) => {None} };
-    led.blink(50, &mut delay);
-    delay2.delay_ms(500);
+    delay.delay_ms(500);
 
     /////////////////  don't need this if there is no screen
     //hprintln!("Sensors in use:");
     show_message("Sensors in use:", &mut display);
 
-    led.blink(1000, &mut delay2);
-    delay2.delay_ms(500); 
+    led.off();
+    delay.delay_ms(2000); // treated as ms   
+    led.on();
+    delay.delay_ms(BLINK_DURATION); // treated as ms
+    led.off();
 
-    for  i in 0..7 {  // 7 is sensors.len(() 
-       if  sensors[i].is_some() {led.blink(50, &mut delay)}
-       else {led.blink(1000, &mut delay)};
-    };
+//    for  i in 0..7 {  // 7 is sensors.len(() 
+//       if  sensors[i].is_some() {led.blink(50, &mut delay)}
+//       else {led.blink(1000, &mut delay)};
+//    };
 
 
 //    screen[0].clear();
@@ -347,7 +426,7 @@ fn main() -> ! {
     //hprintln!("lora");
     
     // cs is named nss on many radio_sx127x module boards
-    let z = Sx127x::spi(spi, spiext.cs,  spiext.busy, spiext.ready, spiext.reset, delay, 
+    let z = Sx127x::spi(spi, spiext.cs,  spiext.busy, spiext.ready, spiext.reset, delay_for_lora, 
                    &CONFIG_RADIO ); 
 
     let mut lora =  match z {
@@ -365,19 +444,22 @@ fn main() -> ! {
 
     //delay consumed by lora. It is available in lora BUT treats arg as seconds not ms!!
 
-    led.blink(1000, &mut delay2);
+    //led.blink(1000, &mut delay2);
     //delay2.delay_ms(500); 
     lora.delay_ms(1);  // arg is being treated as seconds
 
     //hprintln!("loop");
     
     loop {
-      led.blink(BLINK_DURATION, &mut delay2);// treated as ms
- 
+      // blink
+      led.on(); 
+      delay.delay_ms(BLINK_DURATION); 
+      led.off();
+  
       for i in 0..7 { // 7 is sensors.len(() 
          // hprintln!("sensor {}", i);
          th[i] =  match   &mut sensors[i] {
-                                 Some(s) => {let v = s.measure(&mut delay2).unwrap();// uses a DelayNs
+                                 Some(s) => {let v = s.measure(&mut delay).unwrap();// uses a DelayNs
                                              (v.temperature, v.humidity)
                                             },  
                                  None    => {(-50.0, -50.0)}, // default to transmit for no sensor 
@@ -394,7 +476,7 @@ fn main() -> ! {
       //hprintln!("message {:?}", message);
       //hprintln!("send message");
       let r = send(&mut lora, message, &mut display);
-      delay2.delay_ms(READ_INTERVAL);// delay here leave temp/humidity on screen longer
+      delay.delay_ms(3000);// delay here leave temp/humidity on screen longer
       
       match r {
             Ok(b)   => {if b {show_message("TX good", &mut display);
@@ -409,6 +491,7 @@ fn main() -> ! {
                        }
         };
  
-      //delay2.delay_ms(READ_INTERVAL);// treated as ms
+      //delay.delay_ms(READ_INTERVAL);// treated as ms
+      lora.delay_ms(READ_INTERVAL);  // treated as seconds
     }
 }

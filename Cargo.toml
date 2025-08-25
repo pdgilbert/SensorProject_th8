@@ -38,8 +38,8 @@ opt-level = "s"
 
 cortex-m-semihosting   = "0.5.0"
                                          
-stm32f4xx-hal = { git = "https://github.com/stm32-rs/stm32f4xx-hal", rev = "585dd0f304"} #working
-#stm32f4xx-hal = { git = "https://github.com/stm32-rs/stm32f4xx-hal"}
+#stm32f4xx-hal = { git = "https://github.com/stm32-rs/stm32f4xx-hal", rev = "585dd0f304"} #working
+stm32f4xx-hal = { git = "https://github.com/stm32-rs/stm32f4xx-hal"}
 #stm32f4xx-hal = 0.20.0     does not work for this
 
 embedded-hal        = "1.0"
@@ -73,7 +73,7 @@ xca9548a         = "1.0.0"  #working
 #aht10           = { git = "https://github.com/andy31415/aht10", branch = "fix_status_check" }
 #aht10-async     = { git = "https://github.com/jneem/aht10-async" }  
 
-
+# aht20-driver works with aht10 sensors (August, 2025)
 aht20-driver = { version = "2.0.0", default-features = false  }   # uses eh-1.  
 #  see https://github.com/anglerud/aht20-driver/blob/main/Cargo.toml
 #aht20-driver = { version = "2.0.0", default-features = false , features = ["use-defmt"] }  # makes bin big
@@ -84,3 +84,5 @@ embedded-aht20   = "0.1.3"     #eh-1 and both sync and async
 
 [features]
 stm32f401     = ["stm32f4xx-hal/stm32f401"  ] 
+stm32f411     = ["stm32f4xx-hal/stm32f411"  ] 
+no_ssd_display    = []
