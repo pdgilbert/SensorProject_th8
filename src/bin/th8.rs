@@ -2,20 +2,22 @@
 //! (The aht20-driver crate seems to work also with aht10 sensors.)
 //! TESTING WITH EARLY PROTOTYPE  sensors on I2C1,  SSD1306 on I2C2.
 //! CONSIDER REVERSE AS ON T16
-//! xcs9548a because all sensors use the same address.
+//! Using xcs9548a because all sensors use the same address.
 //! (Optionally) Display using SSD1306 on I2C2.
 //! Transmit with LoRa on SPI.
 
-//! Status: 
+//! Status: (August 2025) 
+//!        Working with hardware multiplexI2C v0.1.0 2024-09 and blackpill stm32f401 and stm32f411
+//!         using AHT10 sensors.
 
 //!  To Do:
 //!    - decide I2C1 or I2C2 for ssd or sensors.
 //!    - optional display could be detected rather than indicated by feature no_ssd_display.
 
-// set this with
+// Compile the binary choosing features st32f401 or stm32f411 and optionally no_ssd_display.
 // MONITOR_ID="whatever" cargo build ...
-// MONITOR_ID="whatever"  cargo  run --no-default-features --target thumbv7em-none-eabihf --features stm32f401 --bin aht20-driver
-// MONITOR_ID="whatever"  cargo  run --no-default-features --target thumbv7em-none-eabihf --features no_ssd_displaystm32f401 --bin aht20-driver
+// MONITOR_ID="whatever"  cargo  run --no-default-features --target thumbv7em-none-eabihf --features stm32f401 --bin th8
+// MONITOR_ID="whatever"  cargo  run --no-default-features --target thumbv7em-none-eabihf --features no_ssd_display,stm32f401 --bin th8
 // or  cargo:rustc-env=MONITOR_ID="whatever"
 
 ///////////////////// 
@@ -28,7 +30,7 @@
 const MONITOR_ID: &str = option_env!("MONITOR_ID").expect("THxx");
 const MONITOR_IDU : &[u8] = MONITOR_ID.as_bytes();
 
-const MODULE_CODE:  &str = "th8-f411 aht20";
+const MODULE_CODE:  &str = "th8";
 const READ_INTERVAL:  u32 = 600; // used as seconds 
 const BLINK_DURATION: u32 = 40;   // used as ms
 const S_FMT:       usize  = 14;
@@ -253,7 +255,7 @@ const MODE: Mode = Mode {
 #[entry]
 fn main() -> ! {
 
-    //hprintln!("t8-f411");
+    //hprintln!("th8");
 
     let dp = Peripherals::take().unwrap();
 

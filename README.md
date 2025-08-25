@@ -1,4 +1,5 @@
-STATUS:  bin aht20-driver roughly working. Looking for AHT10 crate.
+STATUS: (August 25, 2025) Working with hardware multiplexI2C  v0.1.0 2024-09 and stm32f401 blackpill
+ and AHT10 sensors.
 
 ## Summary
 
@@ -9,18 +10,17 @@ The measurements are transmitted by LoRa and optionally displayed on an SSD1306.
 
 The code here is based on code in https://github.com/pdgilbert/rust-integration-testing/examples/projects.
 Relative to that repository, this crate is much simplified by targetting specific hardware
-and a specific MCU (stm32f401). 
+and a specific MCU (stm32f401/411). 
 The intention is that code here should be stable and remain working for the hardware.
 The code in repository `rust-integration-testing` is intended for testing new versions of 
 crates and hals, and as a result is sometimes broken.
 
-As of January 2025 the preferred sensor crates are still under considertation. 
-For that reason there are mulitiple bin options, but not all work. 
+As of August 2025 the preferred sensor crate is aht20-driver. It seems to works with aht10 sensors too.
+There is still some consideration of other drivers. The code is not currently using `rtic`.
+There are multiple bin options, but not all work. 
 The multiplexer crate `xca9548a` uses `embedded-hal v1` and that implies sensor devices crates should also.
-Currently I have not found a good choice for an AHT10 driver crate using  `embedded-hal v1`.
-Testing is being mostly done with AHT20. While many device crates compile, some have run time errors. 
-See https://github.com/pdgilbert/i2c-test for more details. Based on test success there,
-and needs/nice properties below, attention is currently focussed on `aht20-driver` crate.
+(See https://github.com/pdgilbert/i2c-test for earlier test details.)
+The needs/nice properties for the sensor device crate follow.
 
 The device crate needs/nice properties:
  - `no_std`. 
@@ -39,14 +39,12 @@ The device crate needs/nice properties:
 For additional notes see 
 https://github.com/pdgilbert/rust-integration-testing/examples/misc-i2c-drivers/i2c-sensor-notes.txt
 
-## Status and Issues
+See https://github.com/pdgilbert/i2c-test for earlier test details. The rough summary is
 
-Check `Cargo.toml` and the code files to see exactly what is being used
-
- - `aht10`  Not using eh-1 and does not compile.
+ - `aht10`  Not using eh-1 and does not compile and appears to be no longer actively maintained.
 
  - `aht20-blueluna` Uses eh-1. No release version. Consumes delay. Does not return Result.  
-              Not compiling, lifetime problems. Abandoned.
+              Not compiling, lifetime problems with rtic. 
 
  - `embedded-aht20` Uses eh-1. Consumes delay. Both sync and async.  Compiles. Run stalls at ..
 
@@ -56,11 +54,14 @@ Check `Cargo.toml` and the code files to see exactly what is being used
 
 ## Building
 
-Choose the binary in following
+Compile the binary choosing features st32f401 or stm32f411 and optionally no_ssd_display.
+```
+MONITOR_ID="whatever"  cargo build --no-default-features  --target thumbv7em-none-eabihf --features stm32f401  --bin th8
+```
 
-``` 401 to 411
+Other binaries may work:
+``` 
 MONITOR_ID="whatever"  cargo build --no-default-features  --target thumbv7em-none-eabihf --features stm32f401   --bin aht10
-MONITOR_ID="whatever"  cargo build --no-default-features  --target thumbv7em-none-eabihf --features stm32f401   --bin aht20-driver
 MONITOR_ID="whatever"  cargo build --no-default-features  --target thumbv7em-none-eabihf --features stm32f401   --bin embedded-aht20
 ```
 
@@ -83,7 +84,7 @@ MONITOR_ID="whatever"  cargo  run --no-default-features --target thumbv7em-none-
 ```
 or
 ```
-MONITOR_ID="whatever"  cargo  run --no-default-features --target thumbv7em-none-eabihf --features stm32f401,no_ssd_display --bin aht20-driver
+MONITOR_ID="whatever"  cargo  run --no-default-features --target thumbv7em-none-eabihf --features stm32f401,no_ssd_display --bin th8
 ```
 
 
