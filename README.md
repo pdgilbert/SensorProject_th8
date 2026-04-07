@@ -1,5 +1,8 @@
-STATUS: (August 25, 2025) Working with hardware multiplexI2C  v0.1.0 2024-09 and stm32f401 blackpill
+STATUS: 
+   (August 25, 2025) Working with hardware multiplexI2C  v0.1.0 2024-09 and stm32f401 blackpill
  and AHT10 sensors.
+   (April 7, 2026) Working with hardware th8-F411 v0.3.1 2025-12  and AHT10 sensors.
+
 
 ## Summary
 
@@ -17,7 +20,7 @@ crates and hals, and as a result is sometimes broken.
 
 As of August 2025 the preferred sensor crate is aht20-driver. It seems to works with aht10 sensors too.
 There is still some consideration of other drivers. The code is not currently using `rtic`.
-There are multiple bin options, but not all work. 
+There are multiple options in bin/, but not all work. 
 The multiplexer crate `xca9548a` uses `embedded-hal v1` and that implies sensor devices crates should also.
 (See https://github.com/pdgilbert/i2c-test for earlier test details.)
 The needs/nice properties for the sensor device crate follow.
@@ -56,17 +59,21 @@ See https://github.com/pdgilbert/i2c-test for earlier test details. The rough su
 
 Compile the binary choosing features st32f401 or stm32f411 and optionally no_ssd_display.
 ```
-MONITOR_ID="whatever"  cargo build --no-default-features  --target thumbv7em-none-eabihf --features stm32f401  --bin th8
+MONITOR_ID="whatever"  cargo build --no-default-features  --target thumbv7em-none-eabihf --features stm32f411  --bin th8
 ```
 
 Other binaries may work:
 ``` 
-MONITOR_ID="whatever"  cargo build --no-default-features  --target thumbv7em-none-eabihf --features stm32f401   --bin aht10
-MONITOR_ID="whatever"  cargo build --no-default-features  --target thumbv7em-none-eabihf --features stm32f401   --bin embedded-aht20
+MONITOR_ID="whatever"  cargo build --no-default-features  --target thumbv7em-none-eabihf --features stm32f411   --bin aht10
+MONITOR_ID="whatever"  cargo build --no-default-features  --target thumbv7em-none-eabihf --features stm32f411   --bin embedded-aht20
 ```
 
 MONITOR_ID is optional. If not supplied "THxx" will be used. 
 If the binary is too large then `--release` is needed.
+
+There is a flag `--feature `v010_2024-09` which indicates older hardware for 
+which ssd is on I2C2 and sensors or on I2C1. 
+With newer hardware  ssd is on I2C1 and sensors or on I2C2.
 
 ## Loading
 
@@ -80,11 +87,11 @@ Adjust interface for your programming dongle.
 
 In another window do
 ```
-MONITOR_ID="whatever"  cargo  run --no-default-features --target thumbv7em-none-eabihf --features stm32f401 --bin aht20-driver
+MONITOR_ID="whatever"  cargo  run --no-default-features --target thumbv7em-none-eabihf --features stm32f411 --bin th8
 ```
 or
 ```
-MONITOR_ID="whatever"  cargo  run --no-default-features --target thumbv7em-none-eabihf --features stm32f401,no_ssd_display --bin th8
+MONITOR_ID="whatever"  cargo  run --no-default-features --target thumbv7em-none-eabihf --features stm32f411,no_ssd_display --bin th8
 ```
 
 

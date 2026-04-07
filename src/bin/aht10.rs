@@ -1,3 +1,4 @@
+// COMPARE PINS WITH th8.rs and rework here !!!!
 //! Measure temperature and humidity on eight AHT10 sensors on I2Cx, multiplexed with crate 
 //! xcs9548a because all sensors use the same addrss.
 //! Display using SSD1306 on I2Cx.

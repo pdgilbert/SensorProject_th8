@@ -1,24 +1,27 @@
 //! Measure temperature and humidity on eight AHT10 or AHT20 sensors on I2C1, multiplexed with crate 
-//! (The aht20-driver crate seems to work also with aht10 sensors.)
-//! TESTING WITH EARLY PROTOTYPE  sensors on I2C1,  SSD1306 on I2C2.
-//! CONSIDER REVERSE AS ON T16
+//! aht20-driver. (The crate seems to work also with aht10 sensors.)
 //! Using xcs9548a because all sensors use the same address.
 //! (Optionally) Display using SSD1306 on I2C2.
 //! Transmit with LoRa on SPI.
 
-//! Status: (August 2025) 
-//!        Working with hardware multiplexI2C v0.1.0 2024-09 and blackpill stm32f401 and stm32f411
-//!         using AHT10 sensors.
+//! Status:
+//!    January 2026:   Working with hardware multiplexI2C v0.3.1 2025-12 which has stm32f411 and RFM95W
+//!         using AHT10 and AHT20 sensors.
+//!    August 2025:   Working with hardware multiplexI2C v0.1.0 2024-09 and blackpill stm32f401 and stm32f411
+//!         using AHT10 and AHT20 sensors.
 
 //!  To Do:
-//!    - decide I2C1 or I2C2 for ssd or sensors.
 //!    - optional display could be detected rather than indicated by feature no_ssd_display.
+//!   (Even without setting feature no_ssd_display, if the ssd is missing sensor and transmition seem to work.)
 
 // Compile the binary choosing features st32f401 or stm32f411 and optionally no_ssd_display.
 // MONITOR_ID="whatever" cargo build ...
 // MONITOR_ID="whatever"  cargo  run --no-default-features --target thumbv7em-none-eabihf --features stm32f401 --bin th8
 // MONITOR_ID="whatever"  cargo  run --no-default-features --target thumbv7em-none-eabihf --features no_ssd_display,stm32f401 --bin th8
 // or  cargo:rustc-env=MONITOR_ID="whatever"
+
+// There is a flag `--feature `v010_2024-09` which indicates older hardware for 
+// which ssd is on I2C2 and sensors or on I2C1. 
 
 ///////////////////// 
 
@@ -87,7 +90,10 @@ use embedded_graphics::{
 //common display sizes are 128x64 and 128x32
 type  DisplaySizeType = ssd1306::prelude::DisplaySize128x64;
 const DISPLAYSIZE: DisplaySizeType = DisplaySize128x64;
+#[cfg(feature = "v010_2024-09")]
 type  DisplayType = Ssd1306<I2CInterface<I2c<I2C2>>, DisplaySizeType, BufferedGraphicsMode<DisplaySizeType>>;
+#[cfg(not(feature = "v010_2024-09"))]
+type  DisplayType = Ssd1306<I2CInterface<I2c<I2C1>>, DisplaySizeType, BufferedGraphicsMode<DisplaySizeType>>;
 
 use ssd1306::{mode::BufferedGraphicsMode, prelude::*, I2CDisplayInterface, Ssd1306};
 
@@ -306,7 +312,10 @@ fn main() -> ! {
 
     /////////////////////   ssd
 
+    #[cfg(feature = "v010_2024-09")]
     let interface = I2CDisplayInterface::new(i2c2); //default address 0x3C
+    #[cfg(not(feature = "v010_2024-09"))]
+    let interface = I2CDisplayInterface::new(i2c1); //default address 0x3C
     
     let mut z = Ssd1306::new(interface, DISPLAYSIZE, DisplayRotation::Rotate0).into_buffered_graphics_mode();
 
@@ -314,6 +323,8 @@ fn main() -> ! {
 
     // disp is Optional because ssd screen may not be plugged in. 
     // It would be nice if it could set None if init fails, but so far not luck, so use cfg
+    // It does now seem to be working when there is no display, even without feature = "no_ssd_display",
+    // but this may be random.
     // If it is None then messages displays are skipped.
 
 
@@ -336,14 +347,21 @@ fn main() -> ! {
    
     /////////////////////  xca   multiple devices on i2c bus
 
+    #[cfg(feature = "v010_2024-09")]
     let switch1 = Xca9548a::new(i2c1, XcaSlaveAddr::default());
+    #[cfg(not(feature = "v010_2024-09"))]
+    let switch1 = Xca9548a::new(i2c2, XcaSlaveAddr::default());
 
     show_message(&"Sensors on xca", &mut display);
 
     /////////////////////  sensors on xca    // Start the sensors.
 
-    type I2c1Type = I2c<I2C1>;
-    type SensType<'a> = AHT20Initialized<'a, I2cSlave<'a, Xca9548a<I2c1Type>, I2c1Type>>;
+    #[cfg(feature = "v010_2024-09")]
+    type SensI2c = I2c<I2C1>;
+    #[cfg(not(feature = "v010_2024-09"))]
+    type SensI2c = I2c<I2C2>;
+
+    type SensType<'a> = AHT20Initialized<'a, I2cSlave<'a, Xca9548a<SensI2c>, SensI2c>>;
 
     //  Option allows for the possibility that some sensors are missing.
     //const gives this `static lifetime, which causes does not live long enough here
