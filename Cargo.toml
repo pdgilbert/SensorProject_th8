@@ -5,10 +5,10 @@
 authors = ["Paul Gilbert"]
 categories = ["embedded", "no-std"]
 description = "module with 8 AHT10 temperature-humidity sensors, and MCU stm32f401 or stm32f411"
-keywords = ["stm32f401", "stm32f401", "i2c", "spi", "temperature", "humidity",]
+keywords = ["stm32f401", "stm32f411", "i2c", "spi", "temperature", "humidity",]
 license = "MIT OR Apache-2.0"
 name = "th8"
-version = "0.1.0"
+version = "0.3.0"
 edition = "2021"
 
 

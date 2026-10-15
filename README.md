@@ -1,8 +1,12 @@
 STATUS: 
-   (August 25, 2025) Working with hardware multiplexI2C  v0.1.0 2024-09 and stm32f401 blackpill
- and AHT10 sensors.
-   (April 7, 2026) Working with hardware th8-F411 v0.3.1 2025-12  and AHT10 sensors.
+   Oct 15, 2026. Updating in hardware th8-F411 v0.3.1 2025-12 with J8 fix.
+   May 8, 2026. Installing with th8-F411 v0.3.1 2025-12 and AHT10 sensors.
+   April 7, 2026. Working with hardware th8-F411 v0.3.1 2025-12  and AHT10 sensors.
+   January 2026:   Working with hardware multiplexI2C v0.3.1 2025-12 th8-F411
+       which has stm32f411 and RFM95W  using AHT10 and AHT20 sensors.
 
+   August 25, 2025. Working with hardware multiplexI2C  v0.1.0 2024-09 and stm32f401 blackpill
+ and AHT10 sensors.
 
 ## Summary
 
@@ -51,7 +55,7 @@ See https://github.com/pdgilbert/i2c-test for earlier test details. The rough su
 
  - `embedded-aht20` Uses eh-1. Consumes delay. Both sync and async.  Compiles. Run stalls at ..
 
- - `aht20-driver`   Uses eh-1. Borrows delay. Compiles and works. 
+ - `aht20-driver`   Uses eh-1. Borrows delay. Compiles and works also with AHT10 device. 
 
 
 
@@ -93,7 +97,9 @@ or
 ```
 MONITOR_ID="whatever"  cargo  run --no-default-features --target thumbv7em-none-eabihf --features stm32f411,no_ssd_display --bin th8
 ```
-
+[So, as of May 2026 t8-f411 v0.3.1 2025-12 modules are programmed with, eg
+MONITOR_ID="hA"  cargo  run --no-default-features --target thumbv7em-none-eabihf --features stm32f411 --bin th8
+]
 
 ## License
 

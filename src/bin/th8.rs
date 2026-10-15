@@ -1,10 +1,13 @@
 //! Measure temperature and humidity on eight AHT10 or AHT20 sensors on I2C1, multiplexed with crate 
-//! aht20-driver. (The crate seems to work also with aht10 sensors.)
+//! aht20-driver. (The crate works also with aht10 sensors.)
 //! Using xcs9548a because all sensors use the same address.
 //! (Optionally) Display using SSD1306 on I2C2.
 //! Transmit with LoRa on SPI.
 
 //! Status:
+//!    October 2026:   Working with hardware multiplexI2C v0.3.1 2025-12 which has stm32f411 and RFM95W.
+//!        Connector J8 did not previously work but has been fixed and software version bumped to 0.3.0.
+//!        Tested using AHT10 and AHT20 sensor.
 //!    January 2026:   Working with hardware multiplexI2C v0.3.1 2025-12 which has stm32f411 and RFM95W
 //!         using AHT10 and AHT20 sensors.
 //!    August 2025:   Working with hardware multiplexI2C v0.1.0 2024-09 and blackpill stm32f401 and stm32f411
@@ -48,8 +51,10 @@ use panic_semihosting as _;
 use panic_halt as _;
 
 //use cortex_m_semihosting::{debug, hprintln};
-//use cortex_m_semihosting::hprintln;   // this should be commented out to run without semihosting
-//use cortex_m::asm; // for delay
+// hprintln should be commented out to run without semihosting
+// [mostly used through show_message()  ]
+//use cortex_m_semihosting::hprintln;
+//use cortex_m::asm; // for asm delay and asm::bkpt()
 use cortex_m_rt::entry;
 
 use core::fmt::Write;
@@ -191,6 +196,7 @@ const MODE: Mode = Mode {
         disp: &mut Option<DisplayType>,
     ) -> ()
     {
+       //hprintln!("{:?}", &text);
        if disp.is_some() { // show_message does nothing if disp is None. 
            //let mut disp = *disp;   
            // workaround. build here because text_style cannot be shared
@@ -282,6 +288,7 @@ fn main() -> ! {
 
     let mut led = gpioc.pc13.into_push_pull_output();
     led.off();
+    //hprintln!("spi");
 
     let spi = Spi::new(
         dp.SPI1,
@@ -342,7 +349,6 @@ fn main() -> ! {
     show_message(MODULE_CODE, &mut display);
 
     delay.delay_ms(2000); // treated as ms
-    //hprintln!("display init done.");
 
    
     /////////////////////  xca   multiple devices on i2c bus
@@ -374,44 +380,69 @@ fn main() -> ! {
 
     // Split the device and pass the virtual I2C devices to sensor driver
     let switch1parts = switch1.split();
+    show_message(&"switch1.split", &mut display);
 
     //  a loop for this should be possible, but my attempts cause lifetime problems.
 
+    show_message(&"z", &mut display);
     let mut z = AHT20::new(switch1parts.i2c0,  S_ADDR);
+//    show_message(&"z reset", &mut display);
+//    z.AHT20Initialized.soft_reset(&mut delay).unwrap();
+    show_message(&"sensors[0]", &mut display);
     sensors[0] = match z.init(&mut delay) { Ok(v) => {Some(v)},  Err(_e) => {None} };
- 
+
     delay.delay_ms(500);
 
+    show_message(&"z", &mut display);
     let mut z = AHT20::new(switch1parts.i2c1,  S_ADDR);
+    show_message(&"sensors[1]", &mut display);
     sensors[1] = match z.init(&mut delay) { Ok(v) => {Some(v)},  Err(_e) => {None} };
+
     delay.delay_ms(500);
 
+    show_message(&"z", &mut display);
     let mut z = AHT20::new(switch1parts.i2c2,  S_ADDR);
+    show_message(&"sensors[2]", &mut display);
     sensors[2] = match z.init(&mut delay) { Ok(v) => {Some(v)},  Err(_e) => {None} };
+
     delay.delay_ms(500);
 
+    show_message(&"z", &mut display);
     let mut z = AHT20::new(switch1parts.i2c3,  S_ADDR);
+    show_message(&"sensors[3]", &mut display);
     sensors[3] = match z.init(&mut delay) { Ok(v) => {Some(v)},  Err(_e) => {None} };
+
     delay.delay_ms(500);
 
+    show_message(&"z", &mut display);
     let mut z = AHT20::new(switch1parts.i2c4,  S_ADDR);
+    show_message(&"sensors[4]", &mut display);
     sensors[4] = match z.init(&mut delay) { Ok(v) => {Some(v)},  Err(_e) => {None} };
+
     delay.delay_ms(500);
 
+    show_message(&"z", &mut display);
     let mut z = AHT20::new(switch1parts.i2c5,  S_ADDR);
+    show_message(&"sensors[5]", &mut display);
     sensors[5] = match z.init(&mut delay) { Ok(v) => {Some(v)},  Err(_e) => {None} };
+
     delay.delay_ms(500);
 
+    show_message(&"z", &mut display);
     let mut z = AHT20::new(switch1parts.i2c6,  S_ADDR);
+    show_message(&"sensors[6]", &mut display);
     sensors[6] = match z.init(&mut delay) { Ok(v) => {Some(v)},  Err(_e) => {None} };
+
     delay.delay_ms(500);
 
+    show_message(&"z", &mut display);
     let mut z = AHT20::new(switch1parts.i2c7,  S_ADDR);
+    show_message(&"sensors[7]", &mut display);
     sensors[7] = match z.init(&mut delay) { Ok(v) => {Some(v)},  Err(_e) => {None} };
+
     delay.delay_ms(500);
 
     /////////////////  don't need this if there is no screen
-    //hprintln!("Sensors in use:");
     show_message("Sensors in use:", &mut display);
 
     led.off();
@@ -420,17 +451,26 @@ fn main() -> ! {
     delay.delay_ms(BLINK_DURATION); // treated as ms
     led.off();
 
-//    for  i in 0..7 {  // 7 is sensors.len(() 
-//       if  sensors[i].is_some() {led.blink(50, &mut delay)}
-//       else {led.blink(1000, &mut delay)};
-//    };
-
+    for  i in 0..8 {  // 7 is sensors.len(() 
+       if  sensors[i].is_some() {
+          show_message("Sensor Some", &mut display);
+          led.on();
+          delay.delay_ms(50); // treated as ms
+          led.off();
+       }
+       else {
+          show_message("Sensor None", &mut display);
+          led.on();
+          delay.delay_ms(1000); // treated as ms
+          led.off();
+       };
+    };
 
 //    screen[0].clear();
 //    screen[1].clear();
 //    write!(screen[0], "Sensors in use:").unwrap();
 //
-//    for  i in 0..7 {  // 7 is sensors.len(() 
+//    for  i in 0..8 {  // 7 is sensors.len(() 
 //       if  sensors[i].is_some() {write!(screen[1], "{} ", i+1).unwrap()}
 //    };
 //
@@ -443,8 +483,8 @@ fn main() -> ! {
 //    /////////////////
 
     /////////////////////   lora
-    //hprintln!("lora");
-    
+    show_message(&"lora", &mut display);
+ 
     // cs is named nss on many radio_sx127x module boards
     let z = Sx127x::spi(spi, spiext.cs,  spiext.busy, spiext.ready, spiext.reset, delay_for_lora, 
                    &CONFIG_RADIO ); 
@@ -468,16 +508,16 @@ fn main() -> ! {
     //delay2.delay_ms(500); 
     lora.delay_ms(1);  // arg is being treated as seconds
 
-    //hprintln!("loop");
-    
+    show_message(&"loop", &mut display);
+ 
     loop {
       // blink
       led.on(); 
       delay.delay_ms(BLINK_DURATION); 
       led.off();
   
-      for i in 0..7 { // 7 is sensors.len(() 
-         // hprintln!("sensor {}", i);
+      for i in 0..8 { // 7 is sensors.len(() 
+         //hprintln!("sensor {}", i);
          th[i] =  match   &mut sensors[i] {
                                  Some(s) => {let v = s.measure(&mut delay).unwrap();// uses a DelayNs
                                              (v.temperature, v.humidity)
@@ -500,10 +540,8 @@ fn main() -> ! {
       
       match r {
             Ok(b)   => {if b {show_message("TX good", &mut display);
-                              //hprintln!("TX good").unwrap(); 
                              }
                         else {show_message("TX bad", &mut display);
-                              //hprintln!("TX bad").unwrap()
                              }
                        }
             Err(_e) => {show_message("transmit failed", &mut display);
